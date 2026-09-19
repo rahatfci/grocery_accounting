@@ -1,0 +1,32 @@
+name: grocery_accounting
+description: "Grocery accounting app built with Flutter"
+publish_to: 'none'
+
+version: 1.0.0+1
+
+environment:
+  sdk: ^3.12.2
+
+dependencies:
+  flutter:
+    sdk: flutter
+  cupertino_icons: ^1.0.8
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+
+  flutter_lints: ^6.0.0
+
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/
+  fonts:
+    - family: CenturyGothic
+      fonts:
+        - asset: fonts/CenturyGothic.ttf
+          style: normal
+        - asset: fonts/CenturyGothicBold.ttf
+          weight: 700
+          style: normal
