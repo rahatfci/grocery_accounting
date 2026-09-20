@@ -1,6 +1,11 @@
+import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 
-void main() {
+import 'firebase_options.dart';
+
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
   runApp(const MyApp());
 }
 
@@ -15,16 +20,16 @@ class MyApp extends StatelessWidget {
       color: Colors.white,
       theme: ThemeData(
         fontFamily: 'CenturyGothic',
-        colorSchemeSeed: Color(int.parse('FF244F3D', radix: 16)),
-        appBarTheme: AppBarTheme(
-          backgroundColor: Color(int.parse('FF244F3D', radix: 16)),
+        colorSchemeSeed: const Color(0xFF244F3D),
+        appBarTheme: const AppBarTheme(
+          backgroundColor: Color(0xFF244F3D),
           foregroundColor: Colors.white,
           iconTheme: IconThemeData(color: Colors.white),
         ),
       ),
       home: Scaffold(
         appBar: AppBar(title: const Text('Grocery Accounting')),
-        body: Center(child: const Text('Flutter Demo Home Page')),
+        body: const Center(child: Text('Flutter Demo Home Page')),
       ),
     );
   }

@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "621918723863",
+    "project_id": "grocery-accounting-993ed",
+    "storage_bucket": "grocery-accounting-993ed.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:621918723863:android:d2ad6d708dc8c7cb4a2152",
+        "android_client_info": {
+          "package_name": "com.example.grocery_accounting"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyALAJgCtgY9p9quvd-6sx-nDClCMccFIyo"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
