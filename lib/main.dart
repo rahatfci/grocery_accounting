@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'app.dart';
 import 'core/di/injection.dart';
 import 'features/auth/presentation/auth_cubit.dart';
+import 'features/items/data/item_repository.dart';
 import 'firebase_options.dart';
 
 Future<void> main() async {
@@ -19,5 +20,10 @@ Future<void> main() async {
     webPersistentTabManager: WebPersistentMultipleTabManager(),
   );
   configureDependencies();
-  runApp(GroceryAccountingApp(authCubit: getIt<AuthCubit>()));
+  runApp(
+    GroceryAccountingApp(
+      authCubit: getIt<AuthCubit>(),
+      itemRepository: getIt<ItemRepository>(),
+    ),
+  );
 }

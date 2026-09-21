@@ -47,3 +47,18 @@ String? validateOptionalWeight(String? value) {
   }
   return null;
 }
+
+/// The inverse of [parseDecimal] for prefilling a field.
+///
+/// A whole number loses its `.0`, because an item measured in pieces should
+/// read `2`, not `2.0`. Null becomes empty, which is how an absent optional
+/// value is shown.
+String formatDecimal(double? value) {
+  if (value == null) {
+    return '';
+  }
+  if (value.isFinite && value == value.roundToDouble()) {
+    return value.toInt().toString();
+  }
+  return value.toString();
+}

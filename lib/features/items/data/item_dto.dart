@@ -56,7 +56,8 @@ String _string(Object? value, {required String fallback}) =>
 
 double _double(Object? value) => value is num ? value.toDouble() : 0;
 
-double? _optionalDouble(Object? value) => value is num ? value.toDouble() : null;
+double? _optionalDouble(Object? value) =>
+    value is num ? value.toDouble() : null;
 
 /// A server timestamp reads back as null from the local cache until the server
 /// acknowledges the write, so a still-pending baseline is approximated as now.

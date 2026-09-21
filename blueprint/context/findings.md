@@ -119,7 +119,7 @@ provider, where a remount closes a cubit someone else still holds.
 no behaviour change at the root. No current requirement is lost.
 **Resolution:**
 
-### F-07 [P3] open - Web Firestore persistence takes the default single-tab manager
+### F-07 [P3] fixed - Web Firestore persistence takes the default single-tab manager
 
 **File:** lib/main.dart:15-17
 **Found:** 2026-09-21 by /audit (scope: current; lens: performance)
@@ -139,7 +139,13 @@ lands in feature 2 onwards.
 **Suggested fix:** Decide deliberately when feature 2 adds the first reads: either
 pass `webPersistentTabManager: const WebPersistentMultipleTabManager()`, or record
 single-tab as accepted behaviour. No current requirement is lost now.
-**Resolution:**
+**Resolution:** fixed in feature 2, step 2. `lib/main.dart` now passes
+`webPersistentTabManager: WebPersistentMultipleTabManager()` alongside
+`persistenceEnabled: true`. The name and import path were confirmed against the
+installed `cloud_firestore_platform_interface-8.0.7/lib/src/settings.dart:210`
+rather than assumed. Verified only as far as startup: the web app boots with
+zero console errors or warnings, which proves the setting is accepted, not that
+two tabs now share the lease. Awaiting an `/audit` pass to close.
 
 ### F-08 [P3] open - The sign-out future is dropped at the call site
 

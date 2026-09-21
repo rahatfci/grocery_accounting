@@ -7,6 +7,12 @@ import '../logic/item.dart';
 import 'item_dto.dart';
 import 'item_repository.dart';
 
+/// Maps anything this repository's stream can fail with onto a [DataFailure],
+/// so no Firebase type crosses out of `data/`.
+DataFailure dataFailureFromError(Object error) => error is FirebaseException
+    ? dataFailureFromCode(error.code)
+    : const UnexpectedDataFailure();
+
 @LazySingleton(as: ItemRepository)
 class FirestoreItemRepository implements ItemRepository {
   const FirestoreItemRepository(this._firestore);
@@ -22,8 +28,13 @@ class FirestoreItemRepository implements ItemRepository {
       .snapshots()
       .map(
         (snapshot) => [
-          for (final doc in snapshot.docs) itemFromFirestore(doc.id, doc.data()),
+          for (final doc in snapshot.docs)
+            itemFromFirestore(doc.id, doc.data()),
         ],
+      )
+      .handleError(
+        (Object error, StackTrace stackTrace) =>
+            Error.throwWithStackTrace(dataFailureFromError(error), stackTrace),
       );
 
   @override
@@ -39,7 +50,13 @@ class FirestoreItemRepository implements ItemRepository {
   Future<Result<void, DataFailure>> update(Item item) =>
       _write(() => _items.doc(item.id).update(itemToFirestore(item)));
 
-  Future<Result<void, DataFailure>> _write(Future<void> Function() write) async {
+  @override
+  Future<Result<void, DataFailure>> delete(Item item) =>
+      _write(() => _items.doc(item.id).delete());
+
+  Future<Result<void, DataFailure>> _write(
+    Future<void> Function() write,
+  ) async {
     try {
       await write();
       return const Ok(null);

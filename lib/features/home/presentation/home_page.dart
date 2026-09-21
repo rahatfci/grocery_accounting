@@ -3,6 +3,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../auth/logic/app_user.dart';
 import '../../auth/presentation/auth_cubit.dart';
+import '../../items/presentation/item_list_page.dart';
 
 /// The shell Home. Receipt capture, running low and the shopping list are
 /// added by their own features.
@@ -19,6 +20,14 @@ class HomePage extends StatelessWidget {
       appBar: AppBar(
         title: const Text('Grocery Accounting'),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.inventory_2_outlined),
+            tooltip: 'Catalogue',
+            // Three screens do not justify a router package.
+            onPressed: () => Navigator.of(context).push(
+              MaterialPageRoute<void>(builder: (_) => const ItemListPage()),
+            ),
+          ),
           IconButton(
             icon: const Icon(Icons.logout),
             tooltip: 'Sign out',

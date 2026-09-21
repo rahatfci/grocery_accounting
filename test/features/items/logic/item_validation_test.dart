@@ -59,4 +59,26 @@ void main() {
       expect(validateOptionalWeight('abc'), 'Enter a valid number');
     });
   });
+
+  group('formatDecimal', () {
+    test('drops the fraction from a whole number', () {
+      expect(formatDecimal(2), '2');
+      expect(formatDecimal(0), '0');
+    });
+
+    test('keeps a real fraction', () {
+      expect(formatDecimal(0.25), '0.25');
+      expect(formatDecimal(1.5), '1.5');
+    });
+
+    test('an absent optional value is an empty field', () {
+      expect(formatDecimal(null), '');
+    });
+
+    test('round-trips through parseDecimal', () {
+      for (final value in [0.0, 2.0, 0.25, 1.5, 12.75]) {
+        expect(parseDecimal(formatDecimal(value)), value);
+      }
+    });
+  });
 }

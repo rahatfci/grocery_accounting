@@ -1,0 +1,102 @@
+import 'dart:async';
+
+import 'package:grocery_accounting/core/data_failure.dart';
+import 'package:grocery_accounting/core/result.dart';
+import 'package:grocery_accounting/features/items/data/item_repository.dart';
+import 'package:grocery_accounting/features/items/logic/item.dart';
+import 'package:grocery_accounting/features/items/logic/item_unit.dart';
+
+/// An item as the repository would hand it back: it already has a document id.
+Item testItem({
+  String id = 'abc123',
+  String name = 'Rice',
+  ItemUnit unit = ItemUnit.kg,
+  String category = 'pantry',
+  double? avgPieceWeight,
+  double dailyUsage = 0.25,
+  double lowThreshold = 2,
+}) => Item(
+  id: id,
+  name: name,
+  unit: unit,
+  category: category,
+  avgPieceWeight: avgPieceWeight,
+  dailyUsage: dailyUsage,
+  lowThreshold: lowThreshold,
+  stockAtBaseline: 0,
+  baselineDate: DateTime(2026, 9, 1, 10, 30),
+);
+
+/// An item as the form would build it before it has ever been written.
+Item newTestItem({String name = 'Rice'}) => testItem(id: '', name: name);
+
+class FakeItemRepository implements ItemRepository {
+  /// One per `watchItems()` call, because `snapshots()` hands back a new
+  /// stream each time and a retry has to be able to listen again.
+  final _controllers = <StreamController<List<Item>>>[];
+
+  Result<void, DataFailure> createResult = const Ok(null);
+  Result<void, DataFailure> updateResult = const Ok(null);
+  Object? createThrows;
+  Object? updateThrows;
+
+  Result<void, DataFailure> deleteResult = const Ok(null);
+  Object? deleteThrows;
+
+  final created = <Item>[];
+  final updated = <Item>[];
+  final deleted = <Item>[];
+
+  /// When set, a write waits on this instead of returning at once, so a test
+  /// can observe the saving state.
+  Completer<void>? writeGate;
+
+  int get watchCalls => _controllers.length;
+
+  bool get hasListener =>
+      _controllers.isNotEmpty && _controllers.last.hasListener;
+
+  void emitItems(List<Item> items) => _controllers.last.add(items);
+
+  void emitError(Object error) => _controllers.last.addError(error);
+
+  @override
+  Stream<List<Item>> watchItems() {
+    final controller = StreamController<List<Item>>();
+    _controllers.add(controller);
+    return controller.stream;
+  }
+
+  @override
+  Future<Result<void, DataFailure>> create(Item item) async {
+    created.add(item);
+    await writeGate?.future;
+    final thrown = createThrows;
+    if (thrown != null) {
+      throw thrown;
+    }
+    return createResult;
+  }
+
+  @override
+  Future<Result<void, DataFailure>> delete(Item item) async {
+    deleted.add(item);
+    await writeGate?.future;
+    final thrown = deleteThrows;
+    if (thrown != null) {
+      throw thrown;
+    }
+    return deleteResult;
+  }
+
+  @override
+  Future<Result<void, DataFailure>> update(Item item) async {
+    updated.add(item);
+    await writeGate?.future;
+    final thrown = updateThrows;
+    if (thrown != null) {
+      throw thrown;
+    }
+    return updateResult;
+  }
+}

@@ -63,7 +63,10 @@ void main() {
 
   group('newItemToFirestore', () {
     test('adds a zero baseline stock and the supplied baseline date', () {
-      final data = newItemToFirestore(_item(), baselineDate: 'server-timestamp');
+      final data = newItemToFirestore(
+        _item(),
+        baselineDate: 'server-timestamp',
+      );
 
       expect(data['stockAtBaseline'], 0.0);
       expect(data['baselineDate'], 'server-timestamp');

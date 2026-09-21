@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
+import '../../../core/widgets/failure_message.dart';
 import 'auth_cubit.dart';
 import 'auth_state.dart';
 
@@ -137,7 +138,7 @@ class _SignInPageState extends State<SignInPage> {
                           ),
                           if (failure != null) ...[
                             const SizedBox(height: 16),
-                            _FailureMessage(message: failure.message),
+                            FailureMessage(message: failure.message),
                           ],
                           const SizedBox(height: 24),
                           _SubmitButton(
@@ -152,40 +153,6 @@ class _SignInPageState extends State<SignInPage> {
               ),
             );
           },
-        ),
-      ),
-    );
-  }
-}
-
-class _FailureMessage extends StatelessWidget {
-  const _FailureMessage({required this.message});
-
-  final String message;
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = Theme.of(context).colorScheme;
-
-    return Semantics(
-      liveRegion: true,
-      child: Container(
-        padding: const EdgeInsets.all(12),
-        decoration: BoxDecoration(
-          color: colors.errorContainer,
-          borderRadius: BorderRadius.circular(8),
-        ),
-        child: Row(
-          children: [
-            Icon(Icons.error_outline, color: colors.onErrorContainer),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Text(
-                message,
-                style: TextStyle(color: colors.onErrorContainer),
-              ),
-            ),
-          ],
         ),
       ),
     );
