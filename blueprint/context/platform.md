@@ -70,6 +70,17 @@ fills it in per platform:
 
 - A done-when proven on one platform and blank on the others is **not proven**.
   Report it as partial, never as a pass.
+- **Scale verification to the change.** This project deliberately does not pay
+  full three-platform verification on every step:
+  - Simple UI edits (copy, a text field, spacing) need no run at all.
+  - Substantial UI work runs on one platform, Android or iOS, and the others are
+    assumed.
+  - Large features, plugin work, and native-only behaviour run on each platform
+    individually.
+  An assumed platform is recorded as `assumed`, never as a pass. Escalate past
+  this rule when a change touches plugins, permissions, keyboard insets, safe
+  areas, system back, deep links, or web-only gaps, because those diverge even
+  when the Dart is identical.
 - `skip` is a valid, honest result when a claim is genuinely platform-specific.
   Say why. Native-only concerns such as permissions, deep links, and system back
   are routinely `skip` on Web.

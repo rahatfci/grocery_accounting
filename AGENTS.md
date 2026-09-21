@@ -85,6 +85,28 @@ logic or a screen must ship the first real test, which turns the gate green.
 Test files mirror source: `lib/features/cart/cart_total.dart` gets
 `test/features/cart/cart_total_test.dart`.
 
+## Device verification
+
+Scale device verification to the size of the change. Building and driving three
+platforms costs minutes per step, and most UI work is identical Dart across all
+of them. Every step is reviewed by a human, so a wrong assumption is caught and
+fixed at review rather than paid for up front on every step.
+
+| Change | What to run |
+| --- | --- |
+| Simple UI edit: copy, a text field, spacing, a colour | Nothing. Assume it renders. |
+| Substantial UI work: new screens, layouts, components | One platform only, Android or iOS. Assume the rest. |
+| Large feature, plugin, or native-only behaviour | Each platform individually. |
+
+- Say which platform was exercised and which were assumed. An assumed platform
+  is reported as `assumed`, never as a pass.
+- Escalate past this table regardless of change size when the work touches
+  plugins, permissions, keyboard insets, safe areas, system back, deep links, or
+  web-only gaps. Those diverge even when the Dart is identical, and text metrics
+  differ per platform, so an overflow can appear on one and not another.
+- `flutter analyze` and `flutter test` still run on every logic-bearing step.
+  This rule reduces device runs, not the automated gates.
+
 ## Conventions
 
 - Sound null safety. Never use `!` to silence a nullable you have not checked.
@@ -110,11 +132,22 @@ Test files mirror source: `lib/features/cart/cart_total.dart` gets
 
 ## Known issues
 
-- `pubspec.yaml` declares `fonts/CenturyGothic.ttf` and
-  `fonts/CenturyGothicBold.ttf`, but the files on disk are `.TTF` (uppercase).
-  This resolves on case-insensitive macOS but will fail to bundle on a
-  case-sensitive filesystem such as a Linux CI runner.
 - `assets/` is declared in `pubspec.yaml` but is empty, so Git will not track it.
   A fresh clone has no `assets/` directory and `flutter build` fails with
   "unable to find directory entry in pubspec.yaml". Add a file or drop the
   declaration.
+- **The Firebase plugins apply the Kotlin Gradle Plugin, which Flutter is
+  removing support for.** Every Android build prints: "Your app uses the
+  following plugins that apply Kotlin Gradle Plugin (KGP): firebase_auth,
+  firebase_core, firebase_storage. Future versions of Flutter will fail to build
+  if your app uses plugins that apply KGP." Builds are fine today. This is a
+  future hard failure on three packages the whole project depends on, and it is
+  fixed by the plugin authors, not here. Watch their changelogs before upgrading
+  Flutter.
+- **ML Kit has no arm64 simulator slices, so iOS simulators are unusable on
+  Apple Silicon.** `google_mlkit_text_recognition` pulls in GoogleMLKit,
+  MLImage, MLKitCommon and MLKitVision, none of which support arm64 for iOS 26+
+  simulators. A physical iPhone is therefore the only iOS target for this
+  project, for every feature and not just the ones using OCR. Budget for the
+  phone being present whenever iOS evidence is needed. The same plugins also do
+  not support Swift Package Manager.

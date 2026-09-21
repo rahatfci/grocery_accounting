@@ -43,3 +43,11 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
+
+# Verification artifacts: screenshots and console logs captured while
+# driving the app on a device. Evidence for a review, not part of the build.
+.playwright-mcp/
+
+# Blueprint generated activity state. Rewritten by every workflow command
+# and never part of a feature commit. manifest.json stays tracked.
+blueprint/.state/run.json

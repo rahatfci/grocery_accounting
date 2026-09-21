@@ -8,7 +8,7 @@ order it runs in. The review screen is the feature; the scanner prefills it.
 
 ## Milestone 1 - Foundation
 
-- [ ] 1. **Firebase and sign in** - wire up Firebase, sign in with a manually created account, app shell and navigation, Firestore and Storage security rules requiring auth.
+- [x] 1. **Firebase and sign in** - wire up Firebase, sign in with a manually created account, app shell and navigation, Firestore and Storage security rules requiring auth.
 
 ## Milestone 2 - Spend tracking
 

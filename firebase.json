@@ -1,0 +1,11 @@
+{
+  "firestore": {
+    "rules": "firestore.rules"
+  },
+  "storage": [
+    {
+      "bucket": "grocery-accounting-993ed.firebasestorage.app",
+      "rules": "storage.rules"
+    }
+  ]
+}
