@@ -11,9 +11,12 @@ Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
   // Web defaults the on-disk cache to off, so offline capture needs this set
-  // explicitly rather than relying on the mobile default.
+  // explicitly rather than relying on the mobile default. Without the multi-tab
+  // manager only one browser tab holds the IndexedDB lease and every other tab
+  // silently runs without persistence.
   FirebaseFirestore.instance.settings = const Settings(
     persistenceEnabled: true,
+    webPersistentTabManager: WebPersistentMultipleTabManager(),
   );
   configureDependencies();
   runApp(GroceryAccountingApp(authCubit: getIt<AuthCubit>()));
