@@ -1,6 +1,7 @@
 import '../../../core/data_failure.dart';
 import '../../../core/result.dart';
 import '../logic/item.dart';
+import '../logic/stock_event.dart';
 
 /// The `items` collection: the household's catalogue.
 ///
@@ -30,4 +31,17 @@ abstract interface class ItemRepository {
   /// tombstone: nothing references `itemId` yet. Once purchases do, feature 3
   /// has to decide what a delete means for them.
   Future<Result<void, DataFailure>> delete(Item item);
+
+  /// Writes [event] to `consumptionEvents` and the item's new baseline pair,
+  /// stamped [now], in one batch. [item] is the version the member saw, so the
+  /// new stock is computed from the number on their screen.
+  ///
+  /// Like [update], only `stockAtBaseline` and `baselineDate` are written to
+  /// the item. A unit the item cannot be measured in is refused before
+  /// anything is written.
+  Future<Result<void, DataFailure>> recordStockEvent(
+    Item item,
+    StockEvent event, {
+    required DateTime now,
+  });
 }

@@ -1,4 +1,5 @@
 import 'item.dart';
+import 'item_unit.dart';
 
 /// The locked stock contract, which features 3, 5, 6 and 7 all depend on:
 ///
@@ -33,4 +34,28 @@ double daysSince(DateTime baselineDate, DateTime now) {
 double restockedBaseline(Item item, double quantity, {required DateTime now}) {
   final stock = currentStock(item, now: now);
   return (stock < 0 ? 0 : stock) + quantity;
+}
+
+/// Stock as a member reads it: `3.5 kg`, `0 pcs`.
+///
+/// A derived stock past empty is shown as zero. The negative value is still
+/// what the formula returns, and what later features compare against.
+///
+/// A non-finite value reads as unknown, and no value is scaled or converted
+/// to an int on the way, so no stored number, however large, can throw here
+/// and take down the screen that recounts it.
+String formatStock(double stock, ItemUnit unit) {
+  if (!stock.isFinite) {
+    return 'Unknown';
+  }
+  if (stock <= 0) {
+    return '0 ${unit.label}';
+  }
+  final fixed = stock.toStringAsFixed(2);
+  // Values that round to zero print as `0.00`, and values from 1e21 print in
+  // exponent form, which has no trailing zeros to trim.
+  final trimmed = fixed.contains('e')
+      ? fixed
+      : fixed.replaceFirst(RegExp(r'\.?0+$'), '');
+  return '${trimmed.isEmpty ? '0' : trimmed} ${unit.label}';
 }

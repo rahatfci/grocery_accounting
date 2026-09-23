@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
+import '../../../core/refusal_window.dart';
 import '../../../core/widgets/failure_message.dart';
 import '../../auth/logic/app_user.dart';
 import '../../items/data/item_repository.dart';
@@ -15,12 +16,6 @@ import '../logic/purchase_validation.dart';
 import 'purchase_line_sheet.dart';
 import 'record_purchase_cubit.dart';
 import 'record_purchase_state.dart';
-
-/// How long a commit is awaited before the screen assumes Firestore has taken
-/// it. With persistence on an offline write never completes, while the local
-/// cache already holds it, so waiting longer would only trap the member on a
-/// spinner. Same window as the item form.
-const _refusalWindow = Duration(milliseconds: 600);
 
 /// How far back the date picker goes. Two years covers a forgotten receipt
 /// without offering a calendar nobody wants to scroll.
@@ -215,7 +210,7 @@ class _PurchaseFormState extends State<_PurchaseForm> {
     });
 
     final outcome = await cubit.commit().timeout(
-      _refusalWindow,
+      refusalWindow,
       onTimeout: () => const CommitSucceeded(),
     );
 

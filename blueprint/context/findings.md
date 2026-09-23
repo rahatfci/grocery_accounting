@@ -189,3 +189,30 @@ The first removes shipped state from the repo, so it needs an explicit user
 decision rather than an automatic repair. No current requirement is lost either
 way.
 **Resolution:**
+
+### F-11 [P2] open - Displayed stock is frozen at the last stream emission
+
+**File:** lib/features/items/presentation/items_cubit.dart:124-125
+**Found:** 2026-09-23 by /audit independent (scope: current; lens: quality)
+**Why it matters:** `ItemsLoaded.now` is taken only when `watchItems()` emits,
+and both the catalogue row and the detail screen derive current stock from it.
+A Firestore snapshot listener does not re-emit on its own, so if the catalogue
+or detail screen stays on the stack (for example the app is backgrounded
+overnight and resumed), the shown stock stays at the old instant until some
+write to `items` arrives. The spec's goal is that staples "visibly run down day
+by day". The write path is unaffected (the cubit passes a fresh `_clock()` to
+the repository), so the member can log use against a number that is hours or a
+day stale, and the result then jumps. The repository doc comment says the new
+stock "is computed from the number on their screen", which is only true while
+the screen is fresh.
+
+**Suggested fix:** Refresh `now` without new data: re-emit
+`ItemsLoaded(items, now: _clock())` when the app resumes (an
+`AppLifecycleListener` on the page calling a small cubit method), or on a coarse
+periodic timer cancelled in `close()`. Either keeps the injected clock and the
+existing tests. No current requirement is lost.
+**Resolution:** Re-examined 2026-09-23 by /audit independent at 3813c40: still
+present, `now` is taken only in `_onItemsChanged` (items_cubit.dart:124-125).
+Remains open at P2.
+Re-examined 2026-09-23 by /audit independent at 6f3ea7a: unchanged, still
+open at P2. The write path still uses a fresh `_clock()` (items_cubit.dart:109).

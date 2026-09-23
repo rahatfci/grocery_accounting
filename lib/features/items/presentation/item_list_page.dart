@@ -1,17 +1,23 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
+import '../../auth/logic/app_user.dart';
 import '../../purchases/data/purchase_repository.dart';
 import '../data/item_repository.dart';
 import '../logic/item.dart';
 import '../logic/item_category.dart';
+import '../logic/stock.dart';
+import 'item_detail_page.dart';
 import 'item_form_page.dart';
 import 'items_cubit.dart';
 import 'items_state.dart';
 
 /// The catalogue, owning the cubit for as long as the screen is on the stack.
 class ItemListPage extends StatelessWidget {
-  const ItemListPage({super.key});
+  const ItemListPage({required this.user, super.key});
+
+  /// Stamped on every stock event recorded from the catalogue.
+  final AppUser user;
 
   @override
   Widget build(BuildContext context) {
@@ -20,7 +26,7 @@ class ItemListPage extends StatelessWidget {
         context.read<ItemRepository>(),
         context.read<PurchaseRepository>(),
       ),
-      child: const ItemListView(),
+      child: ItemListView(user: user),
     );
   }
 }
@@ -28,7 +34,9 @@ class ItemListPage extends StatelessWidget {
 /// The catalogue without its cubit, so a test can supply one.
 @visibleForTesting
 class ItemListView extends StatelessWidget {
-  const ItemListView({super.key});
+  const ItemListView({required this.user, super.key});
+
+  final AppUser user;
 
   @override
   Widget build(BuildContext context) {
@@ -42,12 +50,16 @@ class ItemListView extends StatelessWidget {
             ItemsFailure(:final failure) => _CatalogueFailure(
               message: failure.message,
             ),
-            ItemsLoaded(:final items) => _ItemList(items: items),
+            ItemsLoaded(:final items, :final now) => _ItemList(
+              items: items,
+              now: now,
+              user: user,
+            ),
           },
         ),
       ),
       floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => _openForm(context),
+        onPressed: () => openItemForm(context),
         icon: const Icon(Icons.add),
         label: const Text('Add item'),
       ),
@@ -55,20 +67,16 @@ class ItemListView extends StatelessWidget {
   }
 }
 
-/// Opens the form, to create when [item] is null and to edit when it is not.
-///
-/// The form writes through the catalogue's own cubit, so it is handed the
-/// existing instance rather than building a second one.
-void _openForm(BuildContext context, {Item? item}) {
+/// Opens an item's detail screen, on the catalogue's own cubit so it follows
+/// the same stream rather than opening a second one.
+void _openDetail(BuildContext context, Item item, AppUser user) {
   final cubit = context.read<ItemsCubit>();
-  final state = cubit.state;
-  final items = state is ItemsLoaded ? state.items : const <Item>[];
 
   Navigator.of(context).push(
     MaterialPageRoute<void>(
       builder: (_) => BlocProvider.value(
         value: cubit,
-        child: ItemFormPage(categories: availableCategories(items), item: item),
+        child: ItemDetailPage(itemId: item.id, user: user),
       ),
     ),
   );
@@ -102,7 +110,7 @@ class _CatalogueEmpty extends StatelessWidget {
               ),
               const SizedBox(height: 16),
               FilledButton.icon(
-                onPressed: () => _openForm(context),
+                onPressed: () => openItemForm(context),
                 icon: const Icon(Icons.add),
                 label: const Text('Add item'),
               ),
@@ -150,9 +158,11 @@ class _CatalogueFailure extends StatelessWidget {
 }
 
 class _ItemList extends StatelessWidget {
-  const _ItemList({required this.items});
+  const _ItemList({required this.items, required this.now, required this.user});
 
   final List<Item> items;
+  final DateTime now;
+  final AppUser user;
 
   @override
   Widget build(BuildContext context) {
@@ -166,7 +176,8 @@ class _ItemList extends StatelessWidget {
           padding: const EdgeInsets.only(bottom: 88),
           itemCount: items.length,
           separatorBuilder: (_, _) => const Divider(height: 1),
-          itemBuilder: (context, index) => _ItemRow(item: items[index]),
+          itemBuilder: (context, index) =>
+              _ItemRow(item: items[index], now: now, user: user),
         ),
       ),
     );
@@ -174,21 +185,24 @@ class _ItemList extends StatelessWidget {
 }
 
 class _ItemRow extends StatelessWidget {
-  const _ItemRow({required this.item});
+  const _ItemRow({required this.item, required this.now, required this.user});
 
   final Item item;
+  final DateTime now;
+  final AppUser user;
 
   @override
   Widget build(BuildContext context) {
     return ListTile(
-      onTap: () => _openForm(context, item: item),
+      onTap: () => _openDetail(context, item, user),
       title: Text(
         item.name,
         // A long name truncates rather than overflowing the row.
         maxLines: 1,
         overflow: TextOverflow.ellipsis,
       ),
-      subtitle: Text('${categoryLabel(item.category)} - ${item.unit.label}'),
+      subtitle: Text(categoryLabel(item.category)),
+      trailing: Text(formatStock(currentStock(item, now: now), item.unit)),
     );
   }
 }

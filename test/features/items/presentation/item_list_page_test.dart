@@ -3,12 +3,17 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:grocery_accounting/core/data_failure.dart';
 import 'package:grocery_accounting/features/items/logic/item_unit.dart';
+import 'package:grocery_accounting/features/items/presentation/item_detail_page.dart';
 import 'package:grocery_accounting/features/items/presentation/item_list_page.dart';
 import 'package:grocery_accounting/features/items/presentation/item_form_page.dart';
 import 'package:grocery_accounting/features/items/presentation/items_cubit.dart';
 
+import '../../auth/fake_auth_repository.dart';
 import '../../purchases/fake_purchase_repository.dart';
 import '../fake_item_repository.dart';
+
+/// Two days after `testItem`'s baseline, so a staple has visibly run down.
+final _now = DateTime(2026, 9, 3, 10, 30);
 
 Future<void> _pumpCatalogue(
   WidgetTester tester,
@@ -18,8 +23,8 @@ Future<void> _pumpCatalogue(
   await tester.pumpWidget(
     MaterialApp(
       home: BlocProvider(
-        create: (_) => ItemsCubit(repository, purchases),
-        child: const ItemListView(),
+        create: (_) => ItemsCubit(repository, purchases, clock: () => _now),
+        child: const ItemListView(user: testUser),
       ),
     ),
   );
@@ -91,7 +96,7 @@ void main() {
     expect(find.text('Rice'), findsOneWidget);
   });
 
-  testWidgets('a populated catalogue lists each item with category and unit', (
+  testWidgets('a populated catalogue lists each item with its category', (
     tester,
   ) async {
     await _pumpCatalogue(tester, repository, purchases);
@@ -104,11 +109,43 @@ void main() {
     await tester.pump();
 
     expect(find.text('Rice'), findsOneWidget);
-    expect(find.text('Pantry & Dry Goods - kg'), findsOneWidget);
+    expect(find.text('Pantry & Dry Goods'), findsOneWidget);
     expect(find.text('Milk'), findsOneWidget);
-    expect(find.text('Dairy & Eggs - L'), findsOneWidget);
+    expect(find.text('Dairy & Eggs'), findsOneWidget);
     // A member's own category shows the text they typed, not a lookup miss.
-    expect(find.text('Baby things - kg'), findsOneWidget);
+    expect(find.text('Baby things'), findsOneWidget);
+  });
+
+  testWidgets('each row shows current stock derived from its baseline', (
+    tester,
+  ) async {
+    await _pumpCatalogue(tester, repository, purchases);
+
+    repository.emitItems([
+      testItem(
+        id: 'a',
+        name: 'Rice',
+        dailyUsage: 0.5,
+      ).copyWith(stockAtBaseline: 4),
+      testItem(
+        id: 'b',
+        name: 'Salt',
+        dailyUsage: 0,
+      ).copyWith(stockAtBaseline: 1),
+      testItem(
+        id: 'c',
+        name: 'Pasta',
+        dailyUsage: 1,
+      ).copyWith(stockAtBaseline: 1),
+    ]);
+    await tester.pump();
+
+    // Two days at 0.5 a day.
+    expect(find.text('3 kg'), findsOneWidget);
+    // Not a staple, so it has not moved.
+    expect(find.text('1 kg'), findsOneWidget);
+    // Past empty reads as zero, not as a negative.
+    expect(find.text('0 kg'), findsOneWidget);
   });
 
   testWidgets('a long name truncates rather than overflowing', (tester) async {
@@ -205,9 +242,7 @@ void main() {
     );
   });
 
-  testWidgets('tapping a row opens the form prefilled for editing', (
-    tester,
-  ) async {
+  testWidgets('tapping a row opens that item\'s detail screen', (tester) async {
     await _pumpCatalogue(tester, repository, purchases);
     repository.emitItems([testItem(id: 'abc123', name: 'Rice')]);
     await tester.pump();
@@ -215,8 +250,10 @@ void main() {
     await tester.tap(find.text('Rice'));
     await tester.pumpAndSettle();
 
-    final form = tester.widget<ItemFormPage>(find.byType(ItemFormPage));
-    expect(form.item?.id, 'abc123');
-    expect(find.text('Edit item'), findsOneWidget);
+    final detail = tester.widget<ItemDetailPage>(find.byType(ItemDetailPage));
+    expect(detail.itemId, 'abc123');
+    expect(detail.user, testUser);
+    // On the catalogue's own cubit, not a second subscription.
+    expect(repository.watchCalls, 1);
   });
 }

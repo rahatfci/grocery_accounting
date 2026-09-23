@@ -4,8 +4,10 @@ import 'package:injectable/injectable.dart';
 import '../../../core/data_failure.dart';
 import '../../../core/result.dart';
 import '../logic/item.dart';
+import '../logic/stock_event.dart';
 import 'item_dto.dart';
 import 'item_repository.dart';
+import 'stock_event_dto.dart';
 
 @LazySingleton(as: ItemRepository)
 class FirestoreItemRepository implements ItemRepository {
@@ -15,6 +17,9 @@ class FirestoreItemRepository implements ItemRepository {
 
   CollectionReference<Map<String, dynamic>> get _items =>
       _firestore.collection('items');
+
+  CollectionReference<Map<String, dynamic>> get _events =>
+      _firestore.collection('consumptionEvents');
 
   @override
   Stream<List<Item>> watchItems() => _items
@@ -47,6 +52,33 @@ class FirestoreItemRepository implements ItemRepository {
   @override
   Future<Result<void, DataFailure>> delete(Item item) =>
       _write(() => _items.doc(item.id).delete());
+
+  @override
+  Future<Result<void, DataFailure>> recordStockEvent(
+    Item item,
+    StockEvent event, {
+    required DateTime now,
+  }) async {
+    final baseline = baselineAfter(item, event, now: now);
+    if (baseline == null) {
+      return const Err(UnexpectedDataFailure());
+    }
+    // A client timestamp, as in the purchase commit: offline a server
+    // timestamp resolves at sync time, days away from the stock it is paired
+    // with.
+    final date = Timestamp.fromDate(now);
+
+    return _write(
+      () =>
+          (_firestore.batch()
+                ..set(_events.doc(), stockEventToFirestore(event, date: date))
+                ..update(_items.doc(item.id), {
+                  'stockAtBaseline': baseline,
+                  'baselineDate': date,
+                }))
+              .commit(),
+    );
+  }
 
   Future<Result<void, DataFailure>> _write(
     Future<void> Function() write,

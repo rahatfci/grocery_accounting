@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:grocery_accounting/features/items/logic/item_unit.dart';
 import 'package:grocery_accounting/features/items/logic/stock.dart';
 
 import '../fake_item_repository.dart';
@@ -110,6 +111,39 @@ void main() {
         daysSince(baseline, baseline.subtract(const Duration(days: 1))),
         0,
       );
+    });
+  });
+
+  group('formatStock', () {
+    test('drops a trailing zero and appends the unit label', () {
+      expect(formatStock(3.5, ItemUnit.kg), '3.5 kg');
+      expect(formatStock(2, ItemUnit.l), '2 L');
+    });
+
+    test('rounds to two decimals', () {
+      expect(formatStock(1.23456, ItemUnit.kg), '1.23 kg');
+      expect(formatStock(0.1 + 0.2, ItemUnit.kg), '0.3 kg');
+    });
+
+    test('reads a non-finite stock as unknown instead of throwing', () {
+      expect(formatStock(double.nan, ItemUnit.kg), 'Unknown');
+      expect(formatStock(double.infinity, ItemUnit.kg), 'Unknown');
+    });
+
+    test('renders any finite value without throwing', () {
+      expect(formatStock(1e307, ItemUnit.kg), '1e+307 kg');
+      expect(
+        formatStock(12345678901234567890.0, ItemUnit.g),
+        '12345678901234567168 g',
+      );
+      expect(formatStock(0.004, ItemUnit.kg), '0 kg');
+      expect(formatStock(2.10, ItemUnit.kg), '2.1 kg');
+      expect(formatStock(100, ItemUnit.g), '100 g');
+    });
+
+    test('shows stock past empty as zero', () {
+      expect(formatStock(-1.5, ItemUnit.pcs), '0 pcs');
+      expect(formatStock(-0.001, ItemUnit.g), '0 g');
     });
   });
 }

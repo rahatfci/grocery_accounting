@@ -22,12 +22,16 @@ final class ItemsEmpty extends ItemsState {
 }
 
 final class ItemsLoaded extends ItemsState {
-  const ItemsLoaded(this.items);
+  const ItemsLoaded(this.items, {required this.now});
 
   final List<Item> items;
 
+  /// The moment current stock is shown for. Taken when the stream reported,
+  /// so every row on screen is derived against the same instant.
+  final DateTime now;
+
   @override
-  List<Object?> get props => [items];
+  List<Object?> get props => [items, now];
 }
 
 final class ItemsFailure extends ItemsState {

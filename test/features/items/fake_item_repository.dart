@@ -5,6 +5,7 @@ import 'package:grocery_accounting/core/result.dart';
 import 'package:grocery_accounting/features/items/data/item_repository.dart';
 import 'package:grocery_accounting/features/items/logic/item.dart';
 import 'package:grocery_accounting/features/items/logic/item_unit.dart';
+import 'package:grocery_accounting/features/items/logic/stock_event.dart';
 
 /// An item as the repository would hand it back: it already has a document id.
 Item testItem({
@@ -43,9 +44,16 @@ class FakeItemRepository implements ItemRepository {
   Result<void, DataFailure> deleteResult = const Ok(null);
   Object? deleteThrows;
 
+  Result<void, DataFailure> recordResult = const Ok(null);
+  Object? recordThrows;
+
   final created = <Item>[];
   final updated = <Item>[];
   final deleted = <Item>[];
+
+  /// Each recorded event with the item version and clock it was recorded
+  /// against.
+  final recorded = <({Item item, StockEvent event, DateTime now})>[];
 
   /// When set, a write waits on this instead of returning at once, so a test
   /// can observe the saving state.
@@ -98,5 +106,20 @@ class FakeItemRepository implements ItemRepository {
       throw thrown;
     }
     return updateResult;
+  }
+
+  @override
+  Future<Result<void, DataFailure>> recordStockEvent(
+    Item item,
+    StockEvent event, {
+    required DateTime now,
+  }) async {
+    recorded.add((item: item, event: event, now: now));
+    await writeGate?.future;
+    final thrown = recordThrows;
+    if (thrown != null) {
+      throw thrown;
+    }
+    return recordResult;
   }
 }

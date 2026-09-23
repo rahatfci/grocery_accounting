@@ -2,6 +2,8 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:grocery_accounting/core/data_failure.dart';
 import 'package:grocery_accounting/core/result.dart';
+import 'package:grocery_accounting/features/items/logic/item_unit.dart';
+import 'package:grocery_accounting/features/items/logic/stock_event.dart';
 import 'package:grocery_accounting/features/items/presentation/items_cubit.dart';
 import 'package:grocery_accounting/features/items/presentation/items_state.dart';
 
@@ -21,6 +23,7 @@ class RecordingBlocObserver extends BlocObserver {
 }
 
 void main() {
+  final now = DateTime(2026, 9, 23, 18, 5);
   late FakeItemRepository repository;
   late FakePurchaseRepository purchases;
   late RecordingBlocObserver observer;
@@ -36,7 +39,7 @@ void main() {
 
   group('the items stream', () {
     test('starts loading before the stream has reported', () {
-      final cubit = ItemsCubit(repository, purchases);
+      final cubit = ItemsCubit(repository, purchases, clock: () => now);
 
       expect(cubit.state, const ItemsLoading());
 
@@ -44,7 +47,7 @@ void main() {
     });
 
     test('an empty stream becomes the empty state', () async {
-      final cubit = ItemsCubit(repository, purchases);
+      final cubit = ItemsCubit(repository, purchases, clock: () => now);
       final states = <ItemsState>[];
       cubit.stream.listen(states.add);
 
@@ -57,19 +60,19 @@ void main() {
     });
 
     test('a populated stream becomes the loaded state', () async {
-      final cubit = ItemsCubit(repository, purchases);
+      final cubit = ItemsCubit(repository, purchases, clock: () => now);
       final items = [testItem(name: 'Rice'), testItem(id: 'x', name: 'Salt')];
 
       repository.emitItems(items);
       await pumpEventQueue();
 
-      expect(cubit.state, ItemsLoaded(items));
+      expect(cubit.state, ItemsLoaded(items, now: now));
 
       await cubit.close();
     });
 
     test('emptying a populated catalogue returns to the empty state', () async {
-      final cubit = ItemsCubit(repository, purchases);
+      final cubit = ItemsCubit(repository, purchases, clock: () => now);
 
       repository.emitItems([testItem()]);
       await pumpEventQueue();
@@ -82,7 +85,7 @@ void main() {
     });
 
     test('a stream error becomes a renderable failure state', () async {
-      final cubit = ItemsCubit(repository, purchases);
+      final cubit = ItemsCubit(repository, purchases, clock: () => now);
 
       repository.emitError(const PermissionDenied());
       await pumpEventQueue();
@@ -93,7 +96,7 @@ void main() {
     });
 
     test('a stream error is also reported, not just swallowed', () async {
-      final cubit = ItemsCubit(repository, purchases);
+      final cubit = ItemsCubit(repository, purchases, clock: () => now);
 
       repository.emitError(const ConnectionUnavailable());
       await pumpEventQueue();
@@ -104,7 +107,7 @@ void main() {
     });
 
     test('an unmapped stream error still renders', () async {
-      final cubit = ItemsCubit(repository, purchases);
+      final cubit = ItemsCubit(repository, purchases, clock: () => now);
 
       repository.emitError(StateError('something nobody mapped'));
       await pumpEventQueue();
@@ -115,14 +118,14 @@ void main() {
     });
 
     test('the stream keeps reporting after a failure', () async {
-      final cubit = ItemsCubit(repository, purchases);
+      final cubit = ItemsCubit(repository, purchases, clock: () => now);
 
       repository.emitError(const ConnectionUnavailable());
       await pumpEventQueue();
       repository.emitItems([testItem()]);
       await pumpEventQueue();
 
-      expect(cubit.state, ItemsLoaded([testItem()]));
+      expect(cubit.state, ItemsLoaded([testItem()], now: now));
 
       await cubit.close();
     });
@@ -130,7 +133,7 @@ void main() {
 
   group('save', () {
     test('creates an item that has no document id yet', () async {
-      final cubit = ItemsCubit(repository, purchases);
+      final cubit = ItemsCubit(repository, purchases, clock: () => now);
       final item = newTestItem(name: 'Flour');
 
       final result = await cubit.save(item);
@@ -143,7 +146,7 @@ void main() {
     });
 
     test('updates an item that already has one', () async {
-      final cubit = ItemsCubit(repository, purchases);
+      final cubit = ItemsCubit(repository, purchases, clock: () => now);
       final item = testItem(id: 'abc123', name: 'Rice');
 
       final result = await cubit.save(item);
@@ -157,7 +160,7 @@ void main() {
 
     test('returns the mapped failure when the write is refused', () async {
       repository.createResult = const Err(PermissionDenied());
-      final cubit = ItemsCubit(repository, purchases);
+      final cubit = ItemsCubit(repository, purchases, clock: () => now);
 
       final result = await cubit.save(newTestItem());
 
@@ -169,7 +172,7 @@ void main() {
     test('turns an unexpected throw into a failure and reports it', () async {
       final thrown = StateError('the repository blew up');
       repository.updateThrows = thrown;
-      final cubit = ItemsCubit(repository, purchases);
+      final cubit = ItemsCubit(repository, purchases, clock: () => now);
 
       final result = await cubit.save(testItem());
 
@@ -180,7 +183,7 @@ void main() {
     });
 
     test('leaves the list state to the stream, not to the write', () async {
-      final cubit = ItemsCubit(repository, purchases);
+      final cubit = ItemsCubit(repository, purchases, clock: () => now);
 
       await cubit.save(newTestItem());
 
@@ -192,7 +195,7 @@ void main() {
 
   group('delete', () {
     test('removes the item and reports success', () async {
-      final cubit = ItemsCubit(repository, purchases);
+      final cubit = ItemsCubit(repository, purchases, clock: () => now);
       final item = testItem();
 
       final result = await cubit.delete(item);
@@ -206,7 +209,7 @@ void main() {
     test(
       'checks that nothing references the item before deleting it',
       () async {
-        final cubit = ItemsCubit(repository, purchases);
+        final cubit = ItemsCubit(repository, purchases, clock: () => now);
 
         await cubit.delete(testItem(id: 'abc123'));
 
@@ -217,7 +220,7 @@ void main() {
 
     test('refuses to delete an item a purchase still references', () async {
       purchases.referenceResult = const Ok(true);
-      final cubit = ItemsCubit(repository, purchases);
+      final cubit = ItemsCubit(repository, purchases, clock: () => now);
 
       expect(
         await cubit.delete(testItem()),
@@ -234,7 +237,7 @@ void main() {
 
     test('refuses a delete whose check could not be completed', () async {
       purchases.referenceResult = const Err(ConnectionUnavailable());
-      final cubit = ItemsCubit(repository, purchases);
+      final cubit = ItemsCubit(repository, purchases, clock: () => now);
 
       expect(
         await cubit.delete(testItem()),
@@ -249,7 +252,7 @@ void main() {
 
     test('refuses a delete whose check threw', () async {
       purchases.referenceThrows = StateError('nothing to do with Firestore');
-      final cubit = ItemsCubit(repository, purchases);
+      final cubit = ItemsCubit(repository, purchases, clock: () => now);
 
       expect(
         await cubit.delete(testItem()),
@@ -265,7 +268,7 @@ void main() {
 
     test('returns the mapped failure when the delete is refused', () async {
       repository.deleteResult = const Err(PermissionDenied());
-      final cubit = ItemsCubit(repository, purchases);
+      final cubit = ItemsCubit(repository, purchases, clock: () => now);
 
       final result = await cubit.delete(testItem());
 
@@ -277,7 +280,7 @@ void main() {
     test('turns an unexpected throw into a failure and reports it', () async {
       final thrown = StateError('the repository blew up');
       repository.deleteThrows = thrown;
-      final cubit = ItemsCubit(repository, purchases);
+      final cubit = ItemsCubit(repository, purchases, clock: () => now);
 
       final result = await cubit.delete(testItem());
 
@@ -288,7 +291,7 @@ void main() {
     });
 
     test('leaves the list state to the stream', () async {
-      final cubit = ItemsCubit(repository, purchases);
+      final cubit = ItemsCubit(repository, purchases, clock: () => now);
 
       await cubit.delete(testItem());
 
@@ -300,7 +303,7 @@ void main() {
 
   group('retry', () {
     test('subscribes again after a failure', () async {
-      final cubit = ItemsCubit(repository, purchases);
+      final cubit = ItemsCubit(repository, purchases, clock: () => now);
       repository.emitError(const ConnectionUnavailable());
       await pumpEventQueue();
 
@@ -311,13 +314,13 @@ void main() {
 
       repository.emitItems([testItem()]);
       await pumpEventQueue();
-      expect(cubit.state, ItemsLoaded([testItem()]));
+      expect(cubit.state, ItemsLoaded([testItem()], now: now));
 
       await cubit.close();
     });
 
     test('leaves only the newest subscription listening', () async {
-      final cubit = ItemsCubit(repository, purchases);
+      final cubit = ItemsCubit(repository, purchases, clock: () => now);
       repository.emitError(const ConnectionUnavailable());
       await pumpEventQueue();
 
@@ -333,12 +336,66 @@ void main() {
   });
 
   test('close cancels the subscription', () async {
-    final cubit = ItemsCubit(repository, purchases);
+    final cubit = ItemsCubit(repository, purchases, clock: () => now);
     await pumpEventQueue();
     expect(repository.hasListener, isTrue);
 
     await cubit.close();
 
     expect(repository.hasListener, isFalse);
+  });
+
+  group('recordStockEvent', () {
+    const event = StockEvent(
+      itemId: 'abc123',
+      type: StockEventType.consumed,
+      quantity: 1,
+      unit: ItemUnit.kg,
+      userId: 'uid-1',
+    );
+
+    test('records against the item and the clock', () async {
+      final cubit = ItemsCubit(repository, purchases, clock: () => now);
+      final item = testItem();
+
+      final result = await cubit.recordStockEvent(item, event);
+
+      expect(result, isA<Ok<void, DataFailure>>());
+      expect(repository.recorded.single.item, item);
+      expect(repository.recorded.single.event, event);
+      expect(repository.recorded.single.now, now);
+
+      await cubit.close();
+    });
+
+    test('returns a mapped failure unchanged', () async {
+      final cubit = ItemsCubit(repository, purchases, clock: () => now);
+      repository.recordResult = const Err(PermissionDenied());
+
+      final result = await cubit.recordStockEvent(testItem(), event);
+
+      expect(result, isA<Err<void, DataFailure>>());
+      expect(
+        (result as Err<void, DataFailure>).error,
+        const PermissionDenied(),
+      );
+
+      await cubit.close();
+    });
+
+    test('reports a thrown error and returns an unexpected failure', () async {
+      final cubit = ItemsCubit(repository, purchases, clock: () => now);
+      repository.recordThrows = StateError('boom');
+
+      final result = await cubit.recordStockEvent(testItem(), event);
+
+      expect(
+        (result as Err<void, DataFailure>).error,
+        const UnexpectedDataFailure(),
+      );
+      expect(observer.reported.single, isA<StateError>());
+
+      await cubit.close();
+    });
   });
 }

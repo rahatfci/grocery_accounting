@@ -27,7 +27,7 @@ class HomePage extends StatelessWidget {
             tooltip: 'Catalogue',
             // Three screens do not justify a router package.
             onPressed: () => Navigator.of(context).push(
-              MaterialPageRoute<void>(builder: (_) => const ItemListPage()),
+              MaterialPageRoute<void>(builder: (_) => ItemListPage(user: user)),
             ),
           ),
           IconButton(

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../../core/data_failure.dart';
+import '../../../core/refusal_window.dart';
 import '../../../core/result.dart';
 import '../../../core/widgets/failure_message.dart';
 import '../logic/item.dart';
@@ -9,16 +10,26 @@ import '../logic/item_category.dart';
 import '../logic/item_unit.dart';
 import '../logic/item_validation.dart';
 import 'items_cubit.dart';
+import 'items_state.dart';
 
-/// How long the form waits for the server to refuse a write before it treats
-/// the write as done and closes.
+/// Opens the form, to create when [item] is null and to edit when it is not.
 ///
-/// With persistence on, the write is durably queued the moment it is made and
-/// the catalogue reacts to it at once, so the form must not wait on the
-/// server's acknowledgement: offline that never arrives. A refusal the server
-/// does send comes back in milliseconds, and this window is only there to
-/// catch it while the form is still on screen.
-const _refusalWindow = Duration(milliseconds: 600);
+/// The form writes through the caller's own [ItemsCubit], so it is handed the
+/// existing instance rather than building a second one.
+void openItemForm(BuildContext context, {Item? item}) {
+  final cubit = context.read<ItemsCubit>();
+  final state = cubit.state;
+  final items = state is ItemsLoaded ? state.items : const <Item>[];
+
+  Navigator.of(context).push(
+    MaterialPageRoute<void>(
+      builder: (_) => BlocProvider.value(
+        value: cubit,
+        child: ItemFormPage(categories: availableCategories(items), item: item),
+      ),
+    ),
+  );
+}
 
 /// Creates an item, or edits one. Every field is on one scrolling column, as
 /// the household fills this in on a phone.
@@ -161,7 +172,7 @@ class _ItemFormPageState extends State<ItemFormPage> {
 
     final result = await cubit
         .save(_buildItem(category))
-        .timeout(_refusalWindow, onTimeout: () => const Ok(null));
+        .timeout(refusalWindow, onTimeout: () => const Ok(null));
 
     if (!mounted) {
       return;
@@ -236,7 +247,7 @@ class _ItemFormPageState extends State<ItemFormPage> {
 
     final result = await cubit
         .delete(item)
-        .timeout(_refusalWindow, onTimeout: () => const Ok(null));
+        .timeout(refusalWindow, onTimeout: () => const Ok(null));
 
     if (!mounted) {
       return;

@@ -7,17 +7,22 @@ import '../../../core/result.dart';
 import '../../purchases/data/purchase_repository.dart';
 import '../data/item_repository.dart';
 import '../logic/item.dart';
+import '../logic/stock_event.dart';
 import 'items_state.dart';
 
 /// What the catalogue says when a purchase still points at the item.
 const _itemInUseMessage = 'This item is on a purchase and cannot be deleted';
 
 class ItemsCubit extends Cubit<ItemsState> {
-  ItemsCubit(this._repository, this._purchases) : super(const ItemsLoading()) {
+  ItemsCubit(this._repository, this._purchases, {this._clock = DateTime.now})
+    : super(const ItemsLoading()) {
     _subscribe();
   }
 
   final ItemRepository _repository;
+
+  /// Injected so derived stock and event timestamps are testable.
+  final DateTime Function() _clock;
 
   /// Only ever asked whether an item is still referenced. The catalogue does
   /// not read purchases for anything else.
@@ -92,6 +97,22 @@ class ItemsCubit extends Cubit<ItemsState> {
     }
   }
 
+  /// Records a use, adjustment or recount of [item], as the member saw it.
+  ///
+  /// Like [save], the stream refreshes the stock, and the returned future must
+  /// not block navigation.
+  Future<Result<void, DataFailure>> recordStockEvent(
+    Item item,
+    StockEvent event,
+  ) async {
+    try {
+      return await _repository.recordStockEvent(item, event, now: _clock());
+    } catch (error, stackTrace) {
+      addError(error, stackTrace);
+      return const Err(UnexpectedDataFailure());
+    }
+  }
+
   void _subscribe() {
     _subscription?.cancel();
     _subscription = _repository.watchItems().listen(
@@ -100,8 +121,9 @@ class ItemsCubit extends Cubit<ItemsState> {
     );
   }
 
-  void _onItemsChanged(List<Item> items) =>
-      emit(items.isEmpty ? const ItemsEmpty() : ItemsLoaded(items));
+  void _onItemsChanged(List<Item> items) => emit(
+    items.isEmpty ? const ItemsEmpty() : ItemsLoaded(items, now: _clock()),
+  );
 
   /// A stream error must reach the user as a renderable state, never as an
   /// unhandled error that leaves the screen stuck on its spinner.
