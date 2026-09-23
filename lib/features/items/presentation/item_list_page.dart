@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
+import '../../purchases/data/purchase_repository.dart';
 import '../data/item_repository.dart';
 import '../logic/item.dart';
 import '../logic/item_category.dart';
@@ -15,7 +16,10 @@ class ItemListPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return BlocProvider(
-      create: (context) => ItemsCubit(context.read<ItemRepository>()),
+      create: (context) => ItemsCubit(
+        context.read<ItemRepository>(),
+        context.read<PurchaseRepository>(),
+      ),
       child: const ItemListView(),
     );
   }

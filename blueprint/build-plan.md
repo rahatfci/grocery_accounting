@@ -13,8 +13,8 @@ order it runs in. The review screen is the feature; the scanner prefills it.
 ## Milestone 2 - Spend tracking
 
 - [x] 2. **Item catalogue** - create, edit and list items with name, unit, category, average piece weight, daily usage and low threshold.
-- [ ] 3. **Record a purchase** - the review and commit screen: date, shop, total, who paid, line items, creating unknown items inline, writing the spend and restocking stock in one action.
-- [ ] 4. **Spending reports** - monthly totals by person, category and shop, each person's spend against an equal share, and month to month comparison.
+- [x] 3. **Record a purchase** - the review and commit screen: date, shop, total, who paid, line items, creating unknown items inline, writing the spend and restocking stock in one action.
+- [x] 4. **Spending reports** - monthly totals by person, category and shop, each person's spend against an equal share, and month to month comparison.
 
 ## Milestone 3 - Pantry
 

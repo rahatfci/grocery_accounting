@@ -24,6 +24,14 @@ import 'package:grocery_accounting/features/items/data/firestore_item_repository
     as _i549;
 import 'package:grocery_accounting/features/items/data/item_repository.dart'
     as _i1028;
+import 'package:grocery_accounting/features/members/data/firestore_member_repository.dart'
+    as _i807;
+import 'package:grocery_accounting/features/members/data/member_repository.dart'
+    as _i726;
+import 'package:grocery_accounting/features/purchases/data/firestore_purchase_repository.dart'
+    as _i716;
+import 'package:grocery_accounting/features/purchases/data/purchase_repository.dart'
+    as _i384;
 import 'package:injectable/injectable.dart' as _i526;
 
 extension GetItInjectableX on _i174.GetIt {
@@ -36,8 +44,14 @@ extension GetItInjectableX on _i174.GetIt {
     final firebaseModule = _$FirebaseModule();
     gh.lazySingleton<_i59.FirebaseAuth>(() => firebaseModule.firebaseAuth);
     gh.lazySingleton<_i974.FirebaseFirestore>(() => firebaseModule.firestore);
+    gh.lazySingleton<_i384.PurchaseRepository>(
+      () => _i716.FirestorePurchaseRepository(gh<_i974.FirebaseFirestore>()),
+    );
     gh.lazySingleton<_i1028.ItemRepository>(
       () => _i549.FirestoreItemRepository(gh<_i974.FirebaseFirestore>()),
+    );
+    gh.lazySingleton<_i726.MemberRepository>(
+      () => _i807.FirestoreMemberRepository(gh<_i974.FirebaseFirestore>()),
     );
     gh.lazySingleton<_i123.AuthRepository>(
       () => _i883.FirebaseAuthRepository(gh<_i59.FirebaseAuth>()),

@@ -11,17 +11,19 @@ import 'package:grocery_accounting/features/items/logic/item_unit.dart';
 import 'package:grocery_accounting/features/items/presentation/item_form_page.dart';
 import 'package:grocery_accounting/features/items/presentation/items_cubit.dart';
 
+import '../../purchases/fake_purchase_repository.dart';
 import '../fake_item_repository.dart';
 
 Future<void> _pumpForm(
   WidgetTester tester,
-  FakeItemRepository repository, {
+  FakeItemRepository repository,
+  FakePurchaseRepository purchases, {
   List<Item> existing = const [],
 }) async {
   await tester.pumpWidget(
     MaterialApp(
       home: BlocProvider(
-        create: (_) => ItemsCubit(repository),
+        create: (_) => ItemsCubit(repository, purchases),
         child: ItemFormPage(categories: availableCategories(existing)),
       ),
     ),
@@ -31,12 +33,13 @@ Future<void> _pumpForm(
 Future<void> _pumpEditForm(
   WidgetTester tester,
   FakeItemRepository repository,
+  FakePurchaseRepository purchases,
   Item item,
 ) async {
   await tester.pumpWidget(
     MaterialApp(
       home: BlocProvider(
-        create: (_) => ItemsCubit(repository),
+        create: (_) => ItemsCubit(repository, purchases),
         child: ItemFormPage(
           categories: availableCategories([item]),
           item: item,
@@ -82,11 +85,15 @@ Future<void> _fillValidForm(
 
 void main() {
   late FakeItemRepository repository;
+  late FakePurchaseRepository purchases;
 
-  setUp(() => repository = FakeItemRepository());
+  setUp(() {
+    repository = FakeItemRepository();
+    purchases = FakePurchaseRepository();
+  });
 
   testWidgets('an empty submit reports every required field', (tester) async {
-    await _pumpForm(tester, repository);
+    await _pumpForm(tester, repository, purchases);
 
     await _tapSave(tester);
     await tester.pump();
@@ -100,7 +107,7 @@ void main() {
   testWidgets('daily usage starts at zero, the non-staple case', (
     tester,
   ) async {
-    await _pumpForm(tester, repository);
+    await _pumpForm(tester, repository, purchases);
 
     expect(
       tester
@@ -114,7 +121,7 @@ void main() {
   });
 
   testWidgets('a non-numeric amount is rejected', (tester) async {
-    await _pumpForm(tester, repository);
+    await _pumpForm(tester, repository, purchases);
 
     await tester.enterText(
       find.widgetWithText(TextFormField, 'Low threshold'),
@@ -130,7 +137,7 @@ void main() {
   testWidgets('a zero piece weight is rejected, a positive one accepted', (
     tester,
   ) async {
-    await _pumpForm(tester, repository);
+    await _pumpForm(tester, repository, purchases);
 
     await tester.enterText(
       find.widgetWithText(TextFormField, 'Average piece weight (optional)'),
@@ -145,7 +152,7 @@ void main() {
   testWidgets('a decimal comma is accepted, as the household writes it', (
     tester,
   ) async {
-    await _pumpForm(tester, repository);
+    await _pumpForm(tester, repository, purchases);
     await _fillValidForm(tester, lowThreshold: '1,5');
 
     await _tapSave(tester);
@@ -157,7 +164,7 @@ void main() {
   testWidgets('a created item carries a zero baseline and the chosen fields', (
     tester,
   ) async {
-    await _pumpForm(tester, repository);
+    await _pumpForm(tester, repository, purchases);
     await _fillValidForm(tester, name: '  Rice  ');
     await tester.enterText(
       find.widgetWithText(TextFormField, 'Daily usage'),
@@ -183,7 +190,7 @@ void main() {
   });
 
   testWidgets('a successful save closes the form', (tester) async {
-    await _pumpForm(tester, repository);
+    await _pumpForm(tester, repository, purchases);
     await _fillValidForm(tester);
 
     await _tapSave(tester);
@@ -194,7 +201,7 @@ void main() {
 
   testWidgets('saving disables the form and shows progress', (tester) async {
     repository.writeGate = Completer<void>();
-    await _pumpForm(tester, repository);
+    await _pumpForm(tester, repository, purchases);
     await _fillValidForm(tester);
 
     await _tapSave(tester);
@@ -221,7 +228,7 @@ void main() {
     tester,
   ) async {
     repository.createResult = const Err(PermissionDenied());
-    await _pumpForm(tester, repository);
+    await _pumpForm(tester, repository, purchases);
     await _fillValidForm(tester);
 
     await _tapSave(tester);
@@ -235,7 +242,7 @@ void main() {
 
   testWidgets('editing a field clears the previous failure', (tester) async {
     repository.createResult = const Err(PermissionDenied());
-    await _pumpForm(tester, repository);
+    await _pumpForm(tester, repository, purchases);
     await _fillValidForm(tester);
     await _tapSave(tester);
     await tester.pumpAndSettle();
@@ -255,7 +262,7 @@ void main() {
     // Offline, a queued write is durable but never acknowledged. The form must
     // not hang on it.
     repository.writeGate = Completer<void>();
-    await _pumpForm(tester, repository);
+    await _pumpForm(tester, repository, purchases);
     await _fillValidForm(tester);
 
     await _tapSave(tester);
@@ -277,6 +284,7 @@ void main() {
       await _pumpForm(
         tester,
         repository,
+        purchases,
         existing: [testItem(category: 'Baby things')],
       );
 
@@ -292,7 +300,7 @@ void main() {
     testWidgets('adding a category reveals a field and stores the text', (
       tester,
     ) async {
-      await _pumpForm(tester, repository);
+      await _pumpForm(tester, repository, purchases);
       await tester.enterText(
         find.widgetWithText(TextFormField, 'Name'),
         'Nappies',
@@ -320,7 +328,7 @@ void main() {
     });
 
     testWidgets('an empty new category is rejected', (tester) async {
-      await _pumpForm(tester, repository);
+      await _pumpForm(tester, repository, purchases);
       await tester.enterText(
         find.widgetWithText(TextFormField, 'Name'),
         'Nappies',
@@ -348,6 +356,7 @@ void main() {
       await _pumpForm(
         tester,
         repository,
+        purchases,
         existing: [testItem(category: 'Baby things')],
       );
       await tester.enterText(
@@ -373,7 +382,7 @@ void main() {
     testWidgets('typing a built-in label selects the built-in key', (
       tester,
     ) async {
-      await _pumpForm(tester, repository);
+      await _pumpForm(tester, repository, purchases);
       await tester.enterText(
         find.widgetWithText(TextFormField, 'Name'),
         'Milk',
@@ -408,7 +417,7 @@ void main() {
     );
 
     testWidgets('the form opens prefilled from the item', (tester) async {
-      await _pumpEditForm(tester, repository, existing);
+      await _pumpEditForm(tester, repository, purchases, existing);
 
       expect(find.text('Edit item'), findsOneWidget);
       expect(find.widgetWithText(TextFormField, 'Rice'), findsOneWidget);
@@ -421,7 +430,7 @@ void main() {
     });
 
     testWidgets('saving updates rather than creating', (tester) async {
-      await _pumpEditForm(tester, repository, existing);
+      await _pumpEditForm(tester, repository, purchases, existing);
 
       await tester.enterText(
         find.widgetWithText(TextFormField, 'Rice'),
@@ -439,7 +448,7 @@ void main() {
     testWidgets('an edit carries the baseline pair through untouched', (
       tester,
     ) async {
-      await _pumpEditForm(tester, repository, existing);
+      await _pumpEditForm(tester, repository, purchases, existing);
 
       await tester.enterText(
         find.widgetWithText(TextFormField, 'Rice'),
@@ -465,7 +474,7 @@ void main() {
       await tester.pumpWidget(
         MaterialApp(
           home: BlocProvider(
-            create: (_) => ItemsCubit(repository),
+            create: (_) => ItemsCubit(repository, purchases),
             child: ItemFormPage(
               categories: availableCategories(const []),
               item: odd,
@@ -482,7 +491,7 @@ void main() {
       tester,
     ) async {
       repository.updateResult = const Err(PermissionDenied());
-      await _pumpEditForm(tester, repository, existing);
+      await _pumpEditForm(tester, repository, purchases, existing);
 
       await _tapSave(tester);
       await tester.pumpAndSettle();
@@ -496,13 +505,13 @@ void main() {
     final existing = testItem(id: 'abc123', name: 'Rice');
 
     testWidgets('a new item has nothing to delete', (tester) async {
-      await _pumpForm(tester, repository);
+      await _pumpForm(tester, repository, purchases);
 
       expect(find.byTooltip('Delete item'), findsNothing);
     });
 
     testWidgets('deleting asks first and names the item', (tester) async {
-      await _pumpEditForm(tester, repository, existing);
+      await _pumpEditForm(tester, repository, purchases, existing);
 
       await tester.tap(find.byTooltip('Delete item'));
       await tester.pumpAndSettle();
@@ -514,7 +523,7 @@ void main() {
     });
 
     testWidgets('cancelling leaves the item alone', (tester) async {
-      await _pumpEditForm(tester, repository, existing);
+      await _pumpEditForm(tester, repository, purchases, existing);
       await tester.tap(find.byTooltip('Delete item'));
       await tester.pumpAndSettle();
 
@@ -526,7 +535,7 @@ void main() {
     });
 
     testWidgets('confirming removes it and closes the form', (tester) async {
-      await _pumpEditForm(tester, repository, existing);
+      await _pumpEditForm(tester, repository, purchases, existing);
       await tester.tap(find.byTooltip('Delete item'));
       await tester.pumpAndSettle();
 
@@ -537,11 +546,46 @@ void main() {
       expect(find.byType(ItemFormPage), findsNothing);
     });
 
+    testWidgets('an item a purchase references is refused before the dialog', (
+      tester,
+    ) async {
+      purchases.referenceResult = const Ok(true);
+      await _pumpEditForm(tester, repository, purchases, existing);
+
+      await tester.tap(find.byTooltip('Delete item'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Delete this item?'), findsNothing);
+      expect(
+        find.text('This item is on a purchase and cannot be deleted'),
+        findsOneWidget,
+      );
+      expect(repository.deleted, isEmpty);
+      expect(find.byType(ItemFormPage), findsOneWidget);
+    });
+
+    testWidgets('a check that cannot be completed refuses the delete', (
+      tester,
+    ) async {
+      purchases.referenceResult = const Err(ConnectionUnavailable());
+      await _pumpEditForm(tester, repository, purchases, existing);
+
+      await tester.tap(find.byTooltip('Delete item'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Delete this item?'), findsNothing);
+      expect(
+        find.text('No connection. Check your network and try again'),
+        findsOneWidget,
+      );
+      expect(repository.deleted, isEmpty);
+    });
+
     testWidgets('a refused delete shows the mapped message and stays open', (
       tester,
     ) async {
       repository.deleteResult = const Err(PermissionDenied());
-      await _pumpEditForm(tester, repository, existing);
+      await _pumpEditForm(tester, repository, purchases, existing);
       await tester.tap(find.byTooltip('Delete item'));
       await tester.pumpAndSettle();
 

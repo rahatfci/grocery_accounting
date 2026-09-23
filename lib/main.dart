@@ -6,6 +6,8 @@ import 'app.dart';
 import 'core/di/injection.dart';
 import 'features/auth/presentation/auth_cubit.dart';
 import 'features/items/data/item_repository.dart';
+import 'features/members/data/member_repository.dart';
+import 'features/purchases/data/purchase_repository.dart';
 import 'firebase_options.dart';
 
 Future<void> main() async {
@@ -24,6 +26,8 @@ Future<void> main() async {
     GroceryAccountingApp(
       authCubit: getIt<AuthCubit>(),
       itemRepository: getIt<ItemRepository>(),
+      memberRepository: getIt<MemberRepository>(),
+      purchaseRepository: getIt<PurchaseRepository>(),
     ),
   );
 }

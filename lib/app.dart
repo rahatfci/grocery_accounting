@@ -5,11 +5,15 @@ import 'core/theme/app_theme.dart';
 import 'features/auth/presentation/auth_cubit.dart';
 import 'features/auth/presentation/auth_gate.dart';
 import 'features/items/data/item_repository.dart';
+import 'features/members/data/member_repository.dart';
+import 'features/purchases/data/purchase_repository.dart';
 
 class GroceryAccountingApp extends StatelessWidget {
   const GroceryAccountingApp({
     required this.authCubit,
     required this.itemRepository,
+    required this.memberRepository,
+    required this.purchaseRepository,
     super.key,
   });
 
@@ -21,10 +25,22 @@ class GroceryAccountingApp extends StatelessWidget {
   /// launch, before anyone has signed in.
   final ItemRepository itemRepository;
 
+  /// Resolved in `main` as well. The auth gate writes the mirror document
+  /// through it, and the purchase screen reads the payer list from it.
+  final MemberRepository memberRepository;
+
+  /// Resolved in `main` as well. The purchase screen writes through it, and
+  /// the catalogue asks it whether an item can still be deleted.
+  final PurchaseRepository purchaseRepository;
+
   @override
   Widget build(BuildContext context) {
-    return RepositoryProvider.value(
-      value: itemRepository,
+    return MultiRepositoryProvider(
+      providers: [
+        RepositoryProvider.value(value: itemRepository),
+        RepositoryProvider.value(value: memberRepository),
+        RepositoryProvider.value(value: purchaseRepository),
+      ],
       child: BlocProvider(
         create: (_) => authCubit,
         child: MaterialApp(

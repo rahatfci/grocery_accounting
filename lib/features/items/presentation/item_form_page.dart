@@ -186,6 +186,25 @@ class _ItemFormPageState extends State<ItemFormPage> {
 
     final cubit = context.read<ItemsCubit>();
     final navigator = Navigator.of(context);
+
+    // Asked before the confirmation, so an item a purchase points at is never
+    // offered a dialog that could only end in a refusal.
+    setState(() {
+      _saving = true;
+      _failure = null;
+    });
+    final blocker = await cubit.deleteBlocker(item);
+    if (!mounted) {
+      return;
+    }
+    setState(() {
+      _saving = false;
+      _failure = blocker;
+    });
+    if (blocker != null) {
+      return;
+    }
+
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(

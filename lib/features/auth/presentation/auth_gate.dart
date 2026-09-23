@@ -1,7 +1,13 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
+import '../../../core/data_failure.dart';
+import '../../../core/result.dart';
 import '../../home/presentation/home_page.dart';
+import '../../members/data/member_repository.dart';
+import '../logic/app_user.dart';
 import 'auth_cubit.dart';
 import 'auth_state.dart';
 import 'sign_in_page.dart';
@@ -13,7 +19,16 @@ class AuthGate extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return BlocBuilder<AuthCubit, AuthState>(
+    return BlocConsumer<AuthCubit, AuthState>(
+      // Only the moment a session starts, so a rebuild while signed in does
+      // not write the mirror document again.
+      listenWhen: (previous, current) =>
+          current is AuthSignedIn && previous is! AuthSignedIn,
+      listener: (context, state) {
+        if (state case AuthSignedIn(:final user)) {
+          _mirrorMember(context.read<MemberRepository>(), user);
+        }
+      },
       builder: (context, state) => switch (state) {
         AuthInitial() => const _SessionUnknown(),
         AuthSignedOut() ||
@@ -23,6 +38,23 @@ class AuthGate extends StatelessWidget {
       },
     );
   }
+}
+
+/// Mirrors the Auth account into `users/{uid}`, so the payer picker and the
+/// reports have a member to name.
+///
+/// Fire and forget on purpose: the write must never block sign in or turn a
+/// Firestore hiccup into a screen the member cannot get past. A failure shows
+/// up later as a member missing from the picker, and the next sign in writes
+/// it again.
+void _mirrorMember(MemberRepository repository, AppUser user) {
+  unawaited(
+    repository
+        .upsertCurrentMember(user)
+        .catchError(
+          (Object _) => const Err<void, DataFailure>(UnexpectedDataFailure()),
+        ),
+  );
 }
 
 class _SessionUnknown extends StatelessWidget {

@@ -23,14 +23,18 @@ Map<String, Object?> itemToFirestore(Item item) => {
 ///
 /// [baselineDate] is passed in rather than read here so this stays a pure map
 /// conversion: the repository supplies `FieldValue.serverTimestamp()`, a test
-/// supplies a `Timestamp`. A new item has no stock until a purchase restocks
-/// it, so the baseline is zero.
+/// supplies a `Timestamp`.
+///
+/// An item added from the catalogue has no stock until a purchase restocks it,
+/// so [stockAtBaseline] defaults to zero. An item created on a purchase starts
+/// at the quantity that was just bought.
 Map<String, Object?> newItemToFirestore(
   Item item, {
   required Object baselineDate,
+  double stockAtBaseline = 0,
 }) => {
   ...itemToFirestore(item),
-  'stockAtBaseline': 0.0,
+  'stockAtBaseline': stockAtBaseline,
   'baselineDate': baselineDate,
 };
 

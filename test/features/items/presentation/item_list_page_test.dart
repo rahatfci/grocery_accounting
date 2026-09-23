@@ -7,16 +7,18 @@ import 'package:grocery_accounting/features/items/presentation/item_list_page.da
 import 'package:grocery_accounting/features/items/presentation/item_form_page.dart';
 import 'package:grocery_accounting/features/items/presentation/items_cubit.dart';
 
+import '../../purchases/fake_purchase_repository.dart';
 import '../fake_item_repository.dart';
 
 Future<void> _pumpCatalogue(
   WidgetTester tester,
   FakeItemRepository repository,
+  FakePurchaseRepository purchases,
 ) async {
   await tester.pumpWidget(
     MaterialApp(
       home: BlocProvider(
-        create: (_) => ItemsCubit(repository),
+        create: (_) => ItemsCubit(repository, purchases),
         child: const ItemListView(),
       ),
     ),
@@ -25,11 +27,15 @@ Future<void> _pumpCatalogue(
 
 void main() {
   late FakeItemRepository repository;
+  late FakePurchaseRepository purchases;
 
-  setUp(() => repository = FakeItemRepository());
+  setUp(() {
+    repository = FakeItemRepository();
+    purchases = FakePurchaseRepository();
+  });
 
   testWidgets('waits on a spinner until the stream reports', (tester) async {
-    await _pumpCatalogue(tester, repository);
+    await _pumpCatalogue(tester, repository, purchases);
 
     expect(find.byType(CircularProgressIndicator), findsOneWidget);
   });
@@ -37,7 +43,7 @@ void main() {
   testWidgets('an empty catalogue explains itself and offers the add action', (
     tester,
   ) async {
-    await _pumpCatalogue(tester, repository);
+    await _pumpCatalogue(tester, repository, purchases);
 
     repository.emitItems(const []);
     await tester.pump();
@@ -48,7 +54,7 @@ void main() {
   });
 
   testWidgets('a failure shows the mapped message and a retry', (tester) async {
-    await _pumpCatalogue(tester, repository);
+    await _pumpCatalogue(tester, repository, purchases);
 
     repository.emitError(const PermissionDenied());
     await tester.pump();
@@ -60,7 +66,7 @@ void main() {
   testWidgets('the raw Firestore code never reaches the screen', (
     tester,
   ) async {
-    await _pumpCatalogue(tester, repository);
+    await _pumpCatalogue(tester, repository, purchases);
 
     repository.emitError(const PermissionDenied());
     await tester.pump();
@@ -69,7 +75,7 @@ void main() {
   });
 
   testWidgets('retry subscribes again and shows what arrives', (tester) async {
-    await _pumpCatalogue(tester, repository);
+    await _pumpCatalogue(tester, repository, purchases);
     repository.emitError(const ConnectionUnavailable());
     await tester.pump();
 
@@ -88,7 +94,7 @@ void main() {
   testWidgets('a populated catalogue lists each item with category and unit', (
     tester,
   ) async {
-    await _pumpCatalogue(tester, repository);
+    await _pumpCatalogue(tester, repository, purchases);
 
     repository.emitItems([
       testItem(id: 'a', name: 'Rice', category: 'pantry'),
@@ -106,7 +112,7 @@ void main() {
   });
 
   testWidgets('a long name truncates rather than overflowing', (tester) async {
-    await _pumpCatalogue(tester, repository);
+    await _pumpCatalogue(tester, repository, purchases);
 
     repository.emitItems([
       testItem(name: 'Extra virgin cold pressed olive oil in the large tin'),
@@ -127,7 +133,7 @@ void main() {
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
 
-    await _pumpCatalogue(tester, repository);
+    await _pumpCatalogue(tester, repository, purchases);
     repository.emitItems([testItem(name: 'Rice')]);
     await tester.pump();
 
@@ -135,7 +141,7 @@ void main() {
   });
 
   testWidgets('the add action opens the form', (tester) async {
-    await _pumpCatalogue(tester, repository);
+    await _pumpCatalogue(tester, repository, purchases);
     repository.emitItems([testItem(name: 'Rice')]);
     await tester.pump();
 
@@ -146,7 +152,7 @@ void main() {
   });
 
   testWidgets('the empty state opens the same form', (tester) async {
-    await _pumpCatalogue(tester, repository);
+    await _pumpCatalogue(tester, repository, purchases);
     repository.emitItems(const []);
     await tester.pump();
 
@@ -159,7 +165,7 @@ void main() {
   testWidgets('the form is offered the categories already in use', (
     tester,
   ) async {
-    await _pumpCatalogue(tester, repository);
+    await _pumpCatalogue(tester, repository, purchases);
     repository.emitItems([testItem(name: 'Nappies', category: 'Baby things')]);
     await tester.pump();
 
@@ -175,7 +181,7 @@ void main() {
   testWidgets('the form writes through the catalogue\'s own cubit', (
     tester,
   ) async {
-    await _pumpCatalogue(tester, repository);
+    await _pumpCatalogue(tester, repository, purchases);
     repository.emitItems(const []);
     await tester.pump();
 
@@ -189,7 +195,7 @@ void main() {
   testWidgets('the add action is reachable from a populated catalogue', (
     tester,
   ) async {
-    await _pumpCatalogue(tester, repository);
+    await _pumpCatalogue(tester, repository, purchases);
     repository.emitItems([testItem(name: 'Rice')]);
     await tester.pump();
 
@@ -202,7 +208,7 @@ void main() {
   testWidgets('tapping a row opens the form prefilled for editing', (
     tester,
   ) async {
-    await _pumpCatalogue(tester, repository);
+    await _pumpCatalogue(tester, repository, purchases);
     repository.emitItems([testItem(id: 'abc123', name: 'Rice')]);
     await tester.pump();
 

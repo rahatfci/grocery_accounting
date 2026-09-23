@@ -7,12 +7,6 @@ import '../logic/item.dart';
 import 'item_dto.dart';
 import 'item_repository.dart';
 
-/// Maps anything this repository's stream can fail with onto a [DataFailure],
-/// so no Firebase type crosses out of `data/`.
-DataFailure dataFailureFromError(Object error) => error is FirebaseException
-    ? dataFailureFromCode(error.code)
-    : const UnexpectedDataFailure();
-
 @LazySingleton(as: ItemRepository)
 class FirestoreItemRepository implements ItemRepository {
   const FirestoreItemRepository(this._firestore);
