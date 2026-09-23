@@ -38,6 +38,10 @@ import 'package:grocery_accounting/features/reminders/data/local_run_out_notifie
     as _i360;
 import 'package:grocery_accounting/features/reminders/data/run_out_notifier.dart'
     as _i582;
+import 'package:grocery_accounting/features/shopping_list/data/firestore_shopping_list_repository.dart'
+    as _i575;
+import 'package:grocery_accounting/features/shopping_list/data/shopping_list_repository.dart'
+    as _i285;
 import 'package:injectable/injectable.dart' as _i526;
 
 extension GetItInjectableX on _i174.GetIt {
@@ -53,6 +57,10 @@ extension GetItInjectableX on _i174.GetIt {
     gh.lazySingleton<_i974.FirebaseFirestore>(() => firebaseModule.firestore);
     gh.lazySingleton<_i163.FlutterLocalNotificationsPlugin>(
       () => notificationsModule.notifications,
+    );
+    gh.lazySingleton<_i285.ShoppingListRepository>(
+      () =>
+          _i575.FirestoreShoppingListRepository(gh<_i974.FirebaseFirestore>()),
     );
     gh.lazySingleton<_i582.RunOutNotifier>(
       () => _i360.LocalRunOutNotifier(

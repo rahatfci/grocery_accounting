@@ -14,6 +14,7 @@ import 'package:grocery_accounting/features/purchases/presentation/record_purcha
 import '../../auth/fake_auth_repository.dart';
 import '../../items/fake_item_repository.dart';
 import '../../members/fake_member_repository.dart';
+import '../../shopping_list/fake_shopping_list_repository.dart';
 import '../fake_purchase_repository.dart';
 
 final _now = DateTime(2026, 9, 21, 18, 30);
@@ -52,6 +53,7 @@ void main() {
       purchases: purchases,
       items: items,
       members: members,
+      shoppingList: FakeShoppingListRepository(),
       currentUser: testUser,
       now: () => _now,
     );

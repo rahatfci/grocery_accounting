@@ -9,6 +9,7 @@ import 'features/items/data/item_repository.dart';
 import 'features/members/data/member_repository.dart';
 import 'features/purchases/data/purchase_repository.dart';
 import 'features/reminders/data/run_out_notifier.dart';
+import 'features/shopping_list/data/shopping_list_repository.dart';
 import 'firebase_options.dart';
 
 Future<void> main() async {
@@ -30,6 +31,7 @@ Future<void> main() async {
       memberRepository: getIt<MemberRepository>(),
       purchaseRepository: getIt<PurchaseRepository>(),
       runOutNotifier: getIt<RunOutNotifier>(),
+      shoppingListRepository: getIt<ShoppingListRepository>(),
     ),
   );
 }

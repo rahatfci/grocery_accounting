@@ -8,6 +8,7 @@ import '../../items/data/item_repository.dart';
 import '../../items/logic/item.dart';
 import '../../items/logic/item_validation.dart';
 import '../../members/data/member_repository.dart';
+import '../../shopping_list/data/shopping_list_repository.dart';
 import '../../members/logic/household_member.dart';
 import '../data/purchase_repository.dart';
 import '../logic/money.dart';
@@ -34,6 +35,7 @@ class RecordPurchasePage extends StatelessWidget {
         purchases: context.read<PurchaseRepository>(),
         items: context.read<ItemRepository>(),
         members: context.read<MemberRepository>(),
+        shoppingList: context.read<ShoppingListRepository>(),
         currentUser: user,
       ),
       child: const RecordPurchaseView(),

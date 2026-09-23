@@ -26,6 +26,7 @@ class FirestorePurchaseRepository implements PurchaseRepository {
   Future<Result<void, DataFailure>> commit(
     PurchaseDraft draft, {
     required DateTime now,
+    Set<String> clearEntryIds = const {},
   }) async {
     final targets = restockTargets(draft.lines);
 
@@ -76,6 +77,12 @@ class FirestorePurchaseRepository implements PurchaseRepository {
           'baselineDate': baselineDate,
         });
       }
+    }
+
+    // Deleting an entry another device already removed is a no-op, so a
+    // stale id cannot fail the purchase.
+    for (final entryId in clearEntryIds) {
+      batch.delete(_firestore.collection('shoppingList').doc(entryId));
     }
 
     try {

@@ -24,7 +24,7 @@ order it runs in. The review screen is the feature; the scanner prefills it.
 
 ## Milestone 4 - Shopping list
 
-- [ ] 8. **Shared shopping list** - manual entries syncing live between users, cleared automatically when a confirmed purchase matches them.
+- [x] 8. **Shared shopping list** - manual entries syncing live between users, cleared automatically when a confirmed purchase matches them.
 
 ## Milestone 5 - Receipts
 

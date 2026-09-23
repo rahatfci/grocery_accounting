@@ -1,6 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:grocery_accounting/core/data_failure.dart';
 import 'package:grocery_accounting/core/result.dart';
+import 'package:grocery_accounting/features/items/logic/item.dart';
 import 'package:grocery_accounting/features/items/logic/item_unit.dart';
 import 'package:grocery_accounting/features/purchases/logic/purchase_draft.dart';
 import 'package:grocery_accounting/features/purchases/presentation/record_purchase_cubit.dart';
@@ -9,6 +10,7 @@ import 'package:grocery_accounting/features/purchases/presentation/record_purcha
 import '../../auth/fake_auth_repository.dart';
 import '../../items/fake_item_repository.dart';
 import '../../members/fake_member_repository.dart';
+import '../../shopping_list/fake_shopping_list_repository.dart';
 import '../fake_purchase_repository.dart';
 
 final _now = DateTime(2026, 9, 21, 18, 30);
@@ -17,11 +19,13 @@ void main() {
   late FakePurchaseRepository purchases;
   late FakeItemRepository items;
   late FakeMemberRepository members;
+  late FakeShoppingListRepository shoppingList;
 
   setUp(() {
     purchases = FakePurchaseRepository();
     items = FakeItemRepository();
     members = FakeMemberRepository();
+    shoppingList = FakeShoppingListRepository();
   });
 
   RecordPurchaseCubit build() {
@@ -29,6 +33,7 @@ void main() {
       purchases: purchases,
       items: items,
       members: members,
+      shoppingList: shoppingList,
       currentUser: testUser,
       now: () => _now,
     );
@@ -375,21 +380,113 @@ void main() {
     });
   });
 
-  test('close cancels both subscriptions', () async {
+  test('close cancels every subscription', () async {
     final cubit = RecordPurchaseCubit(
       purchases: purchases,
       items: items,
       members: members,
+      shoppingList: shoppingList,
       currentUser: testUser,
       now: () => _now,
     );
     await Future<void>.delayed(Duration.zero);
     expect(items.hasListener, isTrue);
     expect(members.hasListener, isTrue);
+    expect(shoppingList.hasListener, isTrue);
 
     await cubit.close();
 
     expect(items.hasListener, isFalse);
     expect(members.hasListener, isFalse);
+    expect(shoppingList.hasListener, isFalse);
+  });
+
+  group('clearing the shopping list', () {
+    PurchaseDraftLine lineFor(Item item) => PurchaseDraftLine(
+      item: item,
+      quantity: 1,
+      unit: ItemUnit.kg,
+      lineTotal: 2,
+    );
+
+    Future<RecordPurchaseCubit> filledIn() async {
+      final cubit = await ready();
+      cubit.setShopName('Conad');
+      cubit.setTotalText('10');
+      return cubit;
+    }
+
+    test('passes the entries the purchase covers', () async {
+      final cubit = await filledIn();
+      shoppingList.emitEntries([
+        testEntry(id: 'linked', text: 'Basmati', itemId: 'rice'),
+        testEntry(id: 'named', text: 'bread'),
+        testEntry(id: 'other', text: 'Eggs'),
+      ]);
+      await Future<void>.delayed(Duration.zero);
+      cubit.addLine(lineFor(testItem(id: 'rice', name: 'Rice')));
+      cubit.addLine(lineFor(newTestItem(name: 'Bread')));
+
+      expect(await cubit.commit(), const CommitSucceeded());
+      expect(purchases.clearedEntryIds.single, {'linked', 'named'});
+    });
+
+    test('passes nothing when nothing matches', () async {
+      final cubit = await filledIn();
+      shoppingList.emitEntries([testEntry(id: 'e1', text: 'Eggs')]);
+      await Future<void>.delayed(Duration.zero);
+      cubit.addLine(lineFor(testItem(id: 'rice', name: 'Rice')));
+
+      await cubit.commit();
+
+      expect(purchases.clearedEntryIds.single, isEmpty);
+    });
+
+    test('passes nothing before the list has reported', () async {
+      final cubit = await filledIn();
+      cubit.addLine(lineFor(testItem(id: 'rice', name: 'Rice')));
+
+      expect(await cubit.commit(), const CommitSucceeded());
+      expect(purchases.clearedEntryIds.single, isEmpty);
+    });
+
+    test('a list failure neither blocks nor fails the screen', () async {
+      final cubit = build();
+      shoppingList.emitError(const ConnectionUnavailable());
+      items.emitItems(const []);
+      members.emitMembers(const []);
+      await Future<void>.delayed(Duration.zero);
+
+      expect(cubit.state, isA<RecordPurchaseReady>());
+
+      cubit.setShopName('Conad');
+      cubit.setTotalText('10');
+      cubit.addLine(lineFor(testItem(id: 'rice', name: 'Rice')));
+
+      expect(await cubit.commit(), const CommitSucceeded());
+      expect(purchases.clearedEntryIds.single, isEmpty);
+    });
+
+    test('a list failure after it reported clears nothing', () async {
+      final cubit = await filledIn();
+      shoppingList.emitEntries([testEntry(id: 'e1', text: 'Rice')]);
+      await Future<void>.delayed(Duration.zero);
+      shoppingList.emitError(const ConnectionUnavailable());
+      await Future<void>.delayed(Duration.zero);
+      cubit.addLine(lineFor(testItem(id: 'rice', name: 'Rice')));
+
+      await cubit.commit();
+
+      expect(cubit.state, isA<RecordPurchaseReady>());
+      expect(purchases.clearedEntryIds.single, isEmpty);
+    });
+
+    test('retry listens to the list again', () async {
+      final cubit = build();
+
+      cubit.retry();
+
+      expect(shoppingList.watchCalls, 2);
+    });
   });
 }

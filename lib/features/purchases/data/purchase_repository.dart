@@ -19,9 +19,14 @@ abstract interface class PurchaseRepository {
   ///
   /// [now] stamps the restocked baselines. It is passed in so the stock pair
   /// is internally consistent and testable.
+  ///
+  /// [clearEntryIds] are the shopping list entries this purchase covers. They
+  /// are deleted in the same batch, so the list cannot be cleared by a
+  /// purchase that was never written.
   Future<Result<void, DataFailure>> commit(
     PurchaseDraft draft, {
     required DateTime now,
+    Set<String> clearEntryIds = const {},
   });
 
   /// Every purchase in a half-open window, oldest first, refreshed as the

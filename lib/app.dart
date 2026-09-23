@@ -8,6 +8,7 @@ import 'features/items/data/item_repository.dart';
 import 'features/members/data/member_repository.dart';
 import 'features/purchases/data/purchase_repository.dart';
 import 'features/reminders/data/run_out_notifier.dart';
+import 'features/shopping_list/data/shopping_list_repository.dart';
 
 class GroceryAccountingApp extends StatelessWidget {
   const GroceryAccountingApp({
@@ -16,6 +17,7 @@ class GroceryAccountingApp extends StatelessWidget {
     required this.memberRepository,
     required this.purchaseRepository,
     required this.runOutNotifier,
+    required this.shoppingListRepository,
     super.key,
   });
 
@@ -38,6 +40,10 @@ class GroceryAccountingApp extends StatelessWidget {
   /// Resolved in `main` as well. Home schedules run-out reminders through it.
   final RunOutNotifier runOutNotifier;
 
+  /// Resolved in `main` as well. Home shows the list through it, and the
+  /// purchase screen clears what a purchase covers.
+  final ShoppingListRepository shoppingListRepository;
+
   @override
   Widget build(BuildContext context) {
     return MultiRepositoryProvider(
@@ -46,6 +52,7 @@ class GroceryAccountingApp extends StatelessWidget {
         RepositoryProvider.value(value: memberRepository),
         RepositoryProvider.value(value: purchaseRepository),
         RepositoryProvider.value(value: runOutNotifier),
+        RepositoryProvider.value(value: shoppingListRepository),
       ],
       child: BlocProvider(
         create: (_) => authCubit,

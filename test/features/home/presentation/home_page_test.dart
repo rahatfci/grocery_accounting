@@ -13,12 +13,16 @@ import 'package:grocery_accounting/features/purchases/presentation/record_purcha
 import 'package:grocery_accounting/features/reminders/data/run_out_notifier.dart';
 import 'package:grocery_accounting/features/reminders/presentation/run_out_reminders_cubit.dart';
 import 'package:grocery_accounting/features/reports/presentation/reports_page.dart';
+import 'package:grocery_accounting/features/shopping_list/data/shopping_list_repository.dart';
+import 'package:grocery_accounting/features/shopping_list/presentation/shopping_list_cubit.dart';
+import 'package:grocery_accounting/features/shopping_list/presentation/shopping_list_section.dart';
 
 import '../../auth/fake_auth_repository.dart';
 import '../../items/fake_item_repository.dart';
 import '../../members/fake_member_repository.dart';
 import '../../purchases/fake_purchase_repository.dart';
 import '../../reminders/fake_run_out_notifier.dart';
+import '../../shopping_list/fake_shopping_list_repository.dart';
 
 Future<void> _pumpHome(
   WidgetTester tester,
@@ -27,6 +31,7 @@ Future<void> _pumpHome(
   FakeMemberRepository? memberRepository,
   FakePurchaseRepository? purchaseRepository,
   FakeRunOutNotifier? notifier,
+  FakeShoppingListRepository? shoppingListRepository,
 }) async {
   // The providers sit above MaterialApp exactly as they do in `app.dart`: a
   // pushed route is a sibling of `home`, so anything provided inside `home`
@@ -43,6 +48,9 @@ Future<void> _pumpHome(
         ),
         RepositoryProvider<RunOutNotifier>.value(
           value: notifier ?? FakeRunOutNotifier(),
+        ),
+        RepositoryProvider<ShoppingListRepository>.value(
+          value: shoppingListRepository ?? FakeShoppingListRepository(),
         ),
       ],
       child: BlocProvider(
@@ -62,6 +70,13 @@ Future<void> _pumpRouteTransition(WidgetTester tester) async {
   // One more frame, so a popped route is unmounted and not just finished.
   await tester.pump();
 }
+
+ShoppingListCubit _shoppingListCubit(FakeItemRepository itemRepository) =>
+    ShoppingListCubit(
+      FakeShoppingListRepository(),
+      itemRepository,
+      currentUser: testUser,
+    );
 
 void main() {
   late FakeAuthRepository authRepository;
@@ -87,8 +102,8 @@ void main() {
     expect(find.byType(ItemListPage), findsOneWidget);
     expect(find.text('Catalogue'), findsOneWidget);
     // The pushed screen built its own cubit and started watching, on top of
-    // Home's running low and reminder watches.
-    expect(itemRepository.watchCalls, 3);
+    // Home's running low, reminder and shopping list watches.
+    expect(itemRepository.watchCalls, 4);
   });
 
   testWidgets('the catalogue can be popped back to Home', (tester) async {
@@ -125,9 +140,10 @@ void main() {
 
     expect(find.byType(ReportsView), findsOneWidget);
     // The pushed screen built its own cubit and started watching all three.
-    // Items is also watched by Home's running low section and reminders.
+    // Items is also watched by Home's running low section, reminders and
+    // shopping list.
     expect(purchaseRepository.watchWindowCalls, 1);
-    expect(itemRepository.watchCalls, 3);
+    expect(itemRepository.watchCalls, 4);
     expect(memberRepository.watchCalls, 1);
   });
 
@@ -175,8 +191,9 @@ void main() {
 
     expect(find.byType(RecordPurchaseView), findsOneWidget);
     // The pushed screen built its own cubit and started watching both. Items
-    // is also watched by Home's running low section and reminders.
-    expect(itemRepository.watchCalls, 3);
+    // is also watched by Home's running low section, reminders and shopping
+    // list.
+    expect(itemRepository.watchCalls, 4);
     expect(memberRepository.watchCalls, 1);
   });
 
@@ -199,7 +216,7 @@ void main() {
     await _pumpHome(tester, authRepository, itemRepository);
 
     expect(find.byType(RunningLowSection), findsOneWidget);
-    expect(itemRepository.watchCalls, 2);
+    expect(itemRepository.watchCalls, 3);
 
     itemRepository.emitItemsToAll([
       testItem(lowThreshold: 2).copyWith(stockAtBaseline: 1, dailyUsage: 0),
@@ -221,11 +238,14 @@ void main() {
       clock: () => now,
     );
     addTearDown(reminders.close);
+    final shoppingList = _shoppingListCubit(itemRepository);
+    addTearDown(shoppingList.close);
     await tester.pumpWidget(
       MultiBlocProvider(
         providers: [
           BlocProvider.value(value: cubit),
           BlocProvider.value(value: reminders),
+          BlocProvider.value(value: shoppingList),
         ],
         child: const MaterialApp(home: HomeView(user: testUser)),
       ),
@@ -279,11 +299,14 @@ void main() {
       clock: () => now,
     );
     addTearDown(reminders.close);
+    final shoppingList = _shoppingListCubit(itemRepository);
+    addTearDown(shoppingList.close);
     await tester.pumpWidget(
       MultiBlocProvider(
         providers: [
           BlocProvider.value(value: cubit),
           BlocProvider.value(value: reminders),
+          BlocProvider.value(value: shoppingList),
         ],
         child: const MaterialApp(home: HomeView(user: testUser)),
       ),
@@ -305,5 +328,46 @@ void main() {
 
     expect(notifier.calls, hasLength(2));
     expect(notifier.calls.last, isEmpty);
+  });
+
+  testWidgets('shows the shopping list below running low', (tester) async {
+    final shoppingListRepository = FakeShoppingListRepository();
+    await _pumpHome(
+      tester,
+      authRepository,
+      itemRepository,
+      shoppingListRepository: shoppingListRepository,
+    );
+
+    expect(find.byType(ShoppingListSection), findsOneWidget);
+    expect(shoppingListRepository.watchCalls, 1);
+    expect(
+      tester.getTopLeft(find.text('Shopping list')).dy,
+      greaterThan(tester.getTopLeft(find.text('Running low')).dy),
+    );
+
+    shoppingListRepository.emitEntries([testEntry(text: 'Milk')]);
+    await tester.pump();
+
+    expect(find.text('Milk'), findsOneWidget);
+  });
+
+  testWidgets('adds to the list as the signed-in member', (tester) async {
+    final shoppingListRepository = FakeShoppingListRepository();
+    await _pumpHome(
+      tester,
+      authRepository,
+      itemRepository,
+      shoppingListRepository: shoppingListRepository,
+    );
+
+    await tester.enterText(
+      find.widgetWithText(TextField, 'Add to the list'),
+      'Bread',
+    );
+    await tester.tap(find.byTooltip('Add'));
+    await tester.pump();
+
+    expect(shoppingListRepository.added.single.addedByUserId, testUser.uid);
   });
 }

@@ -216,3 +216,23 @@ present, `now` is taken only in `_onItemsChanged` (items_cubit.dart:124-125).
 Remains open at P2.
 Re-examined 2026-09-23 by /audit independent at 6f3ea7a: unchanged, still
 open at P2. The write path still uses a fresh `_clock()` (items_cubit.dart:109).
+
+### F-12 [P3] open - The purchase screen's shopping list failure report is never asserted
+
+**File:** test/features/purchases/presentation/record_purchase_cubit_test.dart:453-481
+**Found:** 2026-09-24 by /audit independent (scope: current; lens: tests)
+**Why it matters:** The spec's Data / contracts section states that a shopping
+list stream failure on the purchase screen "is reported through `addError` and
+is never shown". `RecordPurchaseCubit._onShoppingListError`
+(lib/features/purchases/presentation/record_purchase_cubit.dart:152-155) does
+both, and the two new tests prove the "never shown" half (the state stays
+`RecordPurchaseReady` and nothing is cleared). Neither installs a
+`BlocObserver`, so deleting the `addError` line would leave the suite green and
+the failure would vanish silently. `shopping_list_cubit_test.dart` already
+asserts the equivalent report for its items stream with a recording observer,
+so the pattern exists and was just not applied here.
+**Suggested fix:** In `a list failure neither blocks nor fails the screen`,
+install a recording `BlocObserver` (as `shopping_list_cubit_test.dart:13-21`
+does) and expect `[const ConnectionUnavailable()]` to have been reported. No
+current requirement is lost.
+**Resolution:**

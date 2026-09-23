@@ -9,17 +9,22 @@ import '../../items/data/item_repository.dart';
 import '../../items/logic/item.dart';
 import '../../members/data/member_repository.dart';
 import '../../members/logic/household_member.dart';
+import '../../shopping_list/data/shopping_list_repository.dart';
+import '../../shopping_list/logic/shopping_entry.dart';
+import '../../shopping_list/logic/shopping_match.dart';
 import '../data/purchase_repository.dart';
 import '../logic/purchase_draft.dart';
 import '../logic/purchase_validation.dart';
 import 'record_purchase_state.dart';
 
-/// Owns the purchase being filled in, and the two collections the pickers need.
+/// Owns the purchase being filled in, the two collections the pickers need,
+/// and the shopping list a saved purchase clears.
 class RecordPurchaseCubit extends Cubit<RecordPurchaseState> {
   RecordPurchaseCubit({
     required this._purchases,
     required this._items,
     required this._members,
+    required this._shoppingList,
     required AppUser currentUser,
     DateTime Function() now = DateTime.now,
   }) : _currentUser = currentUser,
@@ -32,6 +37,7 @@ class RecordPurchaseCubit extends Cubit<RecordPurchaseState> {
   final PurchaseRepository _purchases;
   final ItemRepository _items;
   final MemberRepository _members;
+  final ShoppingListRepository _shoppingList;
   final AppUser _currentUser;
 
   /// Injected so the date the draft starts on, the future check and the
@@ -42,8 +48,13 @@ class RecordPurchaseCubit extends Cubit<RecordPurchaseState> {
   List<Item>? _catalogue;
   List<HouseholdMember>? _household;
 
+  /// The list as this device last saw it. Empty until it reports, or after a
+  /// failure: the purchase never waits on it, it just clears nothing.
+  List<ShoppingEntry> _entries = const [];
+
   StreamSubscription<List<Item>>? _itemsSubscription;
   StreamSubscription<List<HouseholdMember>>? _membersSubscription;
+  StreamSubscription<List<ShoppingEntry>>? _shoppingListSubscription;
 
   void setDate(DateTime date) => _update(_draft.copyWith(date: date));
 
@@ -95,7 +106,14 @@ class RecordPurchaseCubit extends Cubit<RecordPurchaseState> {
     }
 
     try {
-      final result = await _purchases.commit(_draft, now: _now());
+      final result = await _purchases.commit(
+        _draft,
+        now: _now(),
+        clearEntryIds: entriesClearedBy(
+          _entries,
+          _draft.lines.map((line) => line.item),
+        ),
+      );
       return switch (result) {
         Ok() => const CommitSucceeded(),
         Err(:final error) => CommitFailed(error),
@@ -111,8 +129,10 @@ class RecordPurchaseCubit extends Cubit<RecordPurchaseState> {
   void _subscribe() {
     _itemsSubscription?.cancel();
     _membersSubscription?.cancel();
+    _shoppingListSubscription?.cancel();
     _catalogue = null;
     _household = null;
+    _entries = const [];
 
     _itemsSubscription = _items.watchItems().listen((items) {
       _catalogue = items;
@@ -122,6 +142,16 @@ class RecordPurchaseCubit extends Cubit<RecordPurchaseState> {
       _household = members;
       _emitReady();
     }, onError: _onStreamError);
+    _shoppingListSubscription = _shoppingList.watchEntries().listen(
+      (entries) => _entries = entries,
+      onError: _onShoppingListError,
+    );
+  }
+
+  /// Reported, but not shown: recording a spend must not depend on the list.
+  void _onShoppingListError(Object error, StackTrace stackTrace) {
+    _entries = const [];
+    addError(error, stackTrace);
   }
 
   void _update(PurchaseDraft draft) {
@@ -162,6 +192,7 @@ class RecordPurchaseCubit extends Cubit<RecordPurchaseState> {
   Future<void> close() {
     _itemsSubscription?.cancel();
     _membersSubscription?.cancel();
+    _shoppingListSubscription?.cancel();
     return super.close();
   }
 }

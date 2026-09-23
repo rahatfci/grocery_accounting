@@ -58,6 +58,7 @@ class FakePurchaseRepository implements PurchaseRepository {
 
   final committed = <PurchaseDraft>[];
   final commitClocks = <DateTime>[];
+  final clearedEntryIds = <Set<String>>[];
   final referenceChecks = <String>[];
 
   Result<void, DataFailure> commitResult = const Ok(null);
@@ -96,9 +97,11 @@ class FakePurchaseRepository implements PurchaseRepository {
   Future<Result<void, DataFailure>> commit(
     PurchaseDraft draft, {
     required DateTime now,
+    Set<String> clearEntryIds = const {},
   }) async {
     committed.add(draft);
     commitClocks.add(now);
+    clearedEntryIds.add(clearEntryIds);
     await writeGate?.future;
     final thrown = commitThrows;
     if (thrown != null) {

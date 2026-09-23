@@ -9,12 +9,15 @@ import '../../purchases/presentation/record_purchase_page.dart';
 import '../../reminders/data/run_out_notifier.dart';
 import '../../reminders/presentation/run_out_reminders_cubit.dart';
 import '../../reports/presentation/reports_page.dart';
+import '../../shopping_list/data/shopping_list_repository.dart';
+import '../../shopping_list/presentation/shopping_list_cubit.dart';
+import '../../shopping_list/presentation/shopping_list_section.dart';
 import 'running_low_cubit.dart';
 import 'running_low_section.dart';
 
-/// Home, owning the running low and run-out reminder cubits for as long as
-/// someone is signed in.
-/// Receipt capture and the shopping list are added by their own features.
+/// Home, owning the running low, run-out reminder and shopping list cubits for
+/// as long as someone is signed in.
+/// Receipt capture is added by its own feature.
 class HomePage extends StatelessWidget {
   const HomePage({required this.user, super.key});
 
@@ -34,6 +37,13 @@ class HomePage extends StatelessWidget {
           create: (context) => RunOutRemindersCubit(
             context.read<ItemRepository>(),
             context.read<RunOutNotifier>(),
+          ),
+        ),
+        BlocProvider(
+          create: (context) => ShoppingListCubit(
+            context.read<ShoppingListRepository>(),
+            context.read<ItemRepository>(),
+            currentUser: user,
           ),
         ),
       ],
@@ -97,8 +107,7 @@ class HomeView extends StatelessWidget {
                         ),
                         const SizedBox(height: 24),
                         // The one action Home is built around. Receipt capture
-                        // joins it in feature 9, with the shopping list below
-                        // running low.
+                        // joins it in feature 9.
                         FilledButton.icon(
                           onPressed: () => Navigator.of(context).push(
                             MaterialPageRoute<void>(
@@ -120,6 +129,10 @@ class HomeView extends StatelessWidget {
                   const SliverPadding(
                     padding: EdgeInsets.fromLTRB(8, 0, 8, 24),
                     sliver: RunningLowSection(),
+                  ),
+                  const SliverPadding(
+                    padding: EdgeInsets.fromLTRB(8, 0, 8, 24),
+                    sliver: ShoppingListSection(),
                   ),
                 ],
               ),
