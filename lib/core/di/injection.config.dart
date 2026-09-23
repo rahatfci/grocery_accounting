@@ -12,6 +12,8 @@
 
 import 'package:cloud_firestore/cloud_firestore.dart' as _i974;
 import 'package:firebase_auth/firebase_auth.dart' as _i59;
+import 'package:flutter_local_notifications/flutter_local_notifications.dart'
+    as _i163;
 import 'package:get_it/get_it.dart' as _i174;
 import 'package:grocery_accounting/core/di/injection.dart' as _i368;
 import 'package:grocery_accounting/features/auth/data/auth_repository.dart'
@@ -32,6 +34,10 @@ import 'package:grocery_accounting/features/purchases/data/firestore_purchase_re
     as _i716;
 import 'package:grocery_accounting/features/purchases/data/purchase_repository.dart'
     as _i384;
+import 'package:grocery_accounting/features/reminders/data/local_run_out_notifier.dart'
+    as _i360;
+import 'package:grocery_accounting/features/reminders/data/run_out_notifier.dart'
+    as _i582;
 import 'package:injectable/injectable.dart' as _i526;
 
 extension GetItInjectableX on _i174.GetIt {
@@ -42,8 +48,17 @@ extension GetItInjectableX on _i174.GetIt {
   }) {
     final gh = _i526.GetItHelper(this, environment, environmentFilter);
     final firebaseModule = _$FirebaseModule();
+    final notificationsModule = _$NotificationsModule();
     gh.lazySingleton<_i59.FirebaseAuth>(() => firebaseModule.firebaseAuth);
     gh.lazySingleton<_i974.FirebaseFirestore>(() => firebaseModule.firestore);
+    gh.lazySingleton<_i163.FlutterLocalNotificationsPlugin>(
+      () => notificationsModule.notifications,
+    );
+    gh.lazySingleton<_i582.RunOutNotifier>(
+      () => _i360.LocalRunOutNotifier(
+        gh<_i163.FlutterLocalNotificationsPlugin>(),
+      ),
+    );
     gh.lazySingleton<_i384.PurchaseRepository>(
       () => _i716.FirestorePurchaseRepository(gh<_i974.FirebaseFirestore>()),
     );
@@ -64,3 +79,5 @@ extension GetItInjectableX on _i174.GetIt {
 }
 
 class _$FirebaseModule extends _i368.FirebaseModule {}
+
+class _$NotificationsModule extends _i368.NotificationsModule {}

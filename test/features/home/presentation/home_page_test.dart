@@ -10,12 +10,15 @@ import 'package:grocery_accounting/features/items/presentation/item_list_page.da
 import 'package:grocery_accounting/features/members/data/member_repository.dart';
 import 'package:grocery_accounting/features/purchases/data/purchase_repository.dart';
 import 'package:grocery_accounting/features/purchases/presentation/record_purchase_page.dart';
+import 'package:grocery_accounting/features/reminders/data/run_out_notifier.dart';
+import 'package:grocery_accounting/features/reminders/presentation/run_out_reminders_cubit.dart';
 import 'package:grocery_accounting/features/reports/presentation/reports_page.dart';
 
 import '../../auth/fake_auth_repository.dart';
 import '../../items/fake_item_repository.dart';
 import '../../members/fake_member_repository.dart';
 import '../../purchases/fake_purchase_repository.dart';
+import '../../reminders/fake_run_out_notifier.dart';
 
 Future<void> _pumpHome(
   WidgetTester tester,
@@ -23,6 +26,7 @@ Future<void> _pumpHome(
   FakeItemRepository itemRepository, {
   FakeMemberRepository? memberRepository,
   FakePurchaseRepository? purchaseRepository,
+  FakeRunOutNotifier? notifier,
 }) async {
   // The providers sit above MaterialApp exactly as they do in `app.dart`: a
   // pushed route is a sibling of `home`, so anything provided inside `home`
@@ -36,6 +40,9 @@ Future<void> _pumpHome(
         ),
         RepositoryProvider<PurchaseRepository>.value(
           value: purchaseRepository ?? FakePurchaseRepository(),
+        ),
+        RepositoryProvider<RunOutNotifier>.value(
+          value: notifier ?? FakeRunOutNotifier(),
         ),
       ],
       child: BlocProvider(
@@ -80,8 +87,8 @@ void main() {
     expect(find.byType(ItemListPage), findsOneWidget);
     expect(find.text('Catalogue'), findsOneWidget);
     // The pushed screen built its own cubit and started watching, on top of
-    // Home's own running low watch.
-    expect(itemRepository.watchCalls, 2);
+    // Home's running low and reminder watches.
+    expect(itemRepository.watchCalls, 3);
   });
 
   testWidgets('the catalogue can be popped back to Home', (tester) async {
@@ -118,9 +125,9 @@ void main() {
 
     expect(find.byType(ReportsView), findsOneWidget);
     // The pushed screen built its own cubit and started watching all three.
-    // Items is watched once more by Home's running low section.
+    // Items is also watched by Home's running low section and reminders.
     expect(purchaseRepository.watchWindowCalls, 1);
-    expect(itemRepository.watchCalls, 2);
+    expect(itemRepository.watchCalls, 3);
     expect(memberRepository.watchCalls, 1);
   });
 
@@ -168,8 +175,8 @@ void main() {
 
     expect(find.byType(RecordPurchaseView), findsOneWidget);
     // The pushed screen built its own cubit and started watching both. Items
-    // is watched once more by Home's running low section.
-    expect(itemRepository.watchCalls, 2);
+    // is also watched by Home's running low section and reminders.
+    expect(itemRepository.watchCalls, 3);
     expect(memberRepository.watchCalls, 1);
   });
 
@@ -192,9 +199,9 @@ void main() {
     await _pumpHome(tester, authRepository, itemRepository);
 
     expect(find.byType(RunningLowSection), findsOneWidget);
-    expect(itemRepository.watchCalls, 1);
+    expect(itemRepository.watchCalls, 2);
 
-    itemRepository.emitItems([
+    itemRepository.emitItemsToAll([
       testItem(lowThreshold: 2).copyWith(stockAtBaseline: 1, dailyUsage: 0),
     ]);
     await tester.pump();
@@ -208,15 +215,24 @@ void main() {
     var now = baseline;
     final cubit = RunningLowCubit(itemRepository, clock: () => now);
     addTearDown(cubit.close);
+    final reminders = RunOutRemindersCubit(
+      itemRepository,
+      FakeRunOutNotifier(),
+      clock: () => now,
+    );
+    addTearDown(reminders.close);
     await tester.pumpWidget(
-      BlocProvider.value(
-        value: cubit,
+      MultiBlocProvider(
+        providers: [
+          BlocProvider.value(value: cubit),
+          BlocProvider.value(value: reminders),
+        ],
         child: const MaterialApp(home: HomeView(user: testUser)),
       ),
     );
     // Half a kilo a day from 3 kg against a threshold of 2: not low at the
     // baseline, low three days later, with no write to the item between.
-    itemRepository.emitItems([
+    itemRepository.emitItemsToAll([
       testItem(
         name: 'Pasta',
         dailyUsage: 0.5,
@@ -233,5 +249,61 @@ void main() {
 
     expect(find.text('Pasta'), findsOneWidget);
     expect(find.text('1.5 kg'), findsOneWidget);
+  });
+
+  testWidgets('schedules run-out reminders from the catalogue', (tester) async {
+    final notifier = FakeRunOutNotifier();
+    await _pumpHome(tester, authRepository, itemRepository, notifier: notifier);
+    final rice = testItem(
+      dailyUsage: 1,
+    ).copyWith(stockAtBaseline: 40, baselineDate: DateTime.now());
+
+    itemRepository.emitItemsToAll([rice]);
+    await tester.pump();
+
+    expect(notifier.calls, hasLength(1));
+    expect(notifier.calls.single.single.itemName, 'Rice');
+  });
+
+  testWidgets('re-plans run-out reminders when the app resumes', (
+    tester,
+  ) async {
+    final baseline = DateTime(2026, 9, 1, 10, 30);
+    var now = baseline;
+    final notifier = FakeRunOutNotifier();
+    final cubit = RunningLowCubit(itemRepository, clock: () => now);
+    addTearDown(cubit.close);
+    final reminders = RunOutRemindersCubit(
+      itemRepository,
+      notifier,
+      clock: () => now,
+    );
+    addTearDown(reminders.close);
+    await tester.pumpWidget(
+      MultiBlocProvider(
+        providers: [
+          BlocProvider.value(value: cubit),
+          BlocProvider.value(value: reminders),
+        ],
+        child: const MaterialApp(home: HomeView(user: testUser)),
+      ),
+    );
+    // Runs out at 10:30 on 7 September, so the reminder is 09:00 on the 6th.
+    itemRepository.emitItemsToAll([
+      testItem(
+        name: 'Pasta',
+        dailyUsage: 0.5,
+      ).copyWith(stockAtBaseline: 3, baselineDate: baseline),
+    ]);
+    await tester.pump();
+    expect(notifier.calls.single, hasLength(1));
+
+    now = DateTime(2026, 9, 6, 10);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    await tester.pump();
+
+    expect(notifier.calls, hasLength(2));
+    expect(notifier.calls.last, isEmpty);
   });
 }

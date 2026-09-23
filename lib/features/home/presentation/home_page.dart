@@ -6,11 +6,14 @@ import '../../auth/presentation/auth_cubit.dart';
 import '../../items/data/item_repository.dart';
 import '../../items/presentation/item_list_page.dart';
 import '../../purchases/presentation/record_purchase_page.dart';
+import '../../reminders/data/run_out_notifier.dart';
+import '../../reminders/presentation/run_out_reminders_cubit.dart';
 import '../../reports/presentation/reports_page.dart';
 import 'running_low_cubit.dart';
 import 'running_low_section.dart';
 
-/// Home, owning the running low cubit for as long as someone is signed in.
+/// Home, owning the running low and run-out reminder cubits for as long as
+/// someone is signed in.
 /// Receipt capture and the shopping list are added by their own features.
 class HomePage extends StatelessWidget {
   const HomePage({required this.user, super.key});
@@ -19,8 +22,21 @@ class HomePage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return BlocProvider(
-      create: (context) => RunningLowCubit(context.read<ItemRepository>()),
+    return MultiBlocProvider(
+      providers: [
+        BlocProvider(
+          create: (context) => RunningLowCubit(context.read<ItemRepository>()),
+        ),
+        BlocProvider(
+          // Nothing reads its state, so without `lazy: false` it would never
+          // be created and nothing would be scheduled.
+          lazy: false,
+          create: (context) => RunOutRemindersCubit(
+            context.read<ItemRepository>(),
+            context.read<RunOutNotifier>(),
+          ),
+        ),
+      ],
       child: HomeView(user: user),
     );
   }
@@ -115,7 +131,8 @@ class HomeView extends StatelessWidget {
   }
 }
 
-/// Re-judges running low when the app comes back to the foreground.
+/// Re-judges running low and the run-out reminders when the app comes back to
+/// the foreground.
 ///
 /// Home stays mounted all day, and staples run down with no write to `items`,
 /// so without this a phone left on Home overnight shows yesterday's list.
@@ -135,7 +152,10 @@ class _RefreshOnResumeState extends State<_RefreshOnResume> {
   void initState() {
     super.initState();
     _listener = AppLifecycleListener(
-      onResume: () => context.read<RunningLowCubit>().refresh(),
+      onResume: () {
+        context.read<RunningLowCubit>().refresh();
+        context.read<RunOutRemindersCubit>().refresh();
+      },
     );
   }
 

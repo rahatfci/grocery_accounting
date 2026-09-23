@@ -20,7 +20,7 @@ order it runs in. The review screen is the feature; the scanner prefills it.
 
 - [x] 5. **Stock tracking** - derived current stock from the baseline formula, automatic daily decrease for staples, consumption logging for irregular items, recount and ad hoc adjustment.
 - [x] 6. **Running low on the home screen** - items below threshold, calculated from stock, clearing themselves when restocked.
-- [ ] 7. **Run out notifications** - predict the empty date and schedule a local notification ahead of it.
+- [x] 7. **Run out notifications** - predict the empty date and schedule a local notification ahead of it.
 
 ## Milestone 4 - Shopping list
 

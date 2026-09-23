@@ -7,6 +7,7 @@ import 'features/auth/presentation/auth_gate.dart';
 import 'features/items/data/item_repository.dart';
 import 'features/members/data/member_repository.dart';
 import 'features/purchases/data/purchase_repository.dart';
+import 'features/reminders/data/run_out_notifier.dart';
 
 class GroceryAccountingApp extends StatelessWidget {
   const GroceryAccountingApp({
@@ -14,6 +15,7 @@ class GroceryAccountingApp extends StatelessWidget {
     required this.itemRepository,
     required this.memberRepository,
     required this.purchaseRepository,
+    required this.runOutNotifier,
     super.key,
   });
 
@@ -33,6 +35,9 @@ class GroceryAccountingApp extends StatelessWidget {
   /// the catalogue asks it whether an item can still be deleted.
   final PurchaseRepository purchaseRepository;
 
+  /// Resolved in `main` as well. Home schedules run-out reminders through it.
+  final RunOutNotifier runOutNotifier;
+
   @override
   Widget build(BuildContext context) {
     return MultiRepositoryProvider(
@@ -40,6 +45,7 @@ class GroceryAccountingApp extends StatelessWidget {
         RepositoryProvider.value(value: itemRepository),
         RepositoryProvider.value(value: memberRepository),
         RepositoryProvider.value(value: purchaseRepository),
+        RepositoryProvider.value(value: runOutNotifier),
       ],
       child: BlocProvider(
         create: (_) => authCubit,

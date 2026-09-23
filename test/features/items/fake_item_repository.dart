@@ -70,6 +70,13 @@ class FakeItemRepository implements ItemRepository {
 
   void emitItems(List<Item> items) => _controllers.last.add(items);
 
+  /// Reports [items] to every watch, as Firestore does for each listener.
+  void emitItemsToAll(List<Item> items) {
+    for (final controller in _controllers) {
+      controller.add(items);
+    }
+  }
+
   void emitError(Object error) => _controllers.last.addError(error);
 
   @override
