@@ -59,6 +59,10 @@ class FakeItemRepository implements ItemRepository {
   /// can observe the saving state.
   Completer<void>? writeGate;
 
+  /// When set, every new watch reports this at once, so a screen that only
+  /// needs the catalogue to have answered can settle.
+  List<Item>? initialItems;
+
   int get watchCalls => _controllers.length;
 
   bool get hasListener =>
@@ -72,6 +76,9 @@ class FakeItemRepository implements ItemRepository {
   Stream<List<Item>> watchItems() {
     final controller = StreamController<List<Item>>();
     _controllers.add(controller);
+    if (initialItems case final items?) {
+      controller.add(items);
+    }
     return controller.stream;
   }
 

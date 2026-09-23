@@ -3,6 +3,8 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:grocery_accounting/features/auth/presentation/auth_cubit.dart';
 import 'package:grocery_accounting/features/home/presentation/home_page.dart';
+import 'package:grocery_accounting/features/home/presentation/running_low_cubit.dart';
+import 'package:grocery_accounting/features/home/presentation/running_low_section.dart';
 import 'package:grocery_accounting/features/items/data/item_repository.dart';
 import 'package:grocery_accounting/features/items/presentation/item_list_page.dart';
 import 'package:grocery_accounting/features/members/data/member_repository.dart';
@@ -77,8 +79,9 @@ void main() {
 
     expect(find.byType(ItemListPage), findsOneWidget);
     expect(find.text('Catalogue'), findsOneWidget);
-    // The pushed screen built its own cubit and started watching.
-    expect(itemRepository.watchCalls, 1);
+    // The pushed screen built its own cubit and started watching, on top of
+    // Home's own running low watch.
+    expect(itemRepository.watchCalls, 2);
   });
 
   testWidgets('the catalogue can be popped back to Home', (tester) async {
@@ -115,8 +118,9 @@ void main() {
 
     expect(find.byType(ReportsView), findsOneWidget);
     // The pushed screen built its own cubit and started watching all three.
+    // Items is watched once more by Home's running low section.
     expect(purchaseRepository.watchWindowCalls, 1);
-    expect(itemRepository.watchCalls, 1);
+    expect(itemRepository.watchCalls, 2);
     expect(memberRepository.watchCalls, 1);
   });
 
@@ -163,8 +167,9 @@ void main() {
     await _pumpRouteTransition(tester);
 
     expect(find.byType(RecordPurchaseView), findsOneWidget);
-    // The pushed screen built its own cubit and started watching both.
-    expect(itemRepository.watchCalls, 1);
+    // The pushed screen built its own cubit and started watching both. Items
+    // is watched once more by Home's running low section.
+    expect(itemRepository.watchCalls, 2);
     expect(memberRepository.watchCalls, 1);
   });
 
@@ -181,5 +186,52 @@ void main() {
       find.widgetWithText(FilledButton, 'Record a purchase'),
       findsOneWidget,
     );
+  });
+
+  testWidgets('shows running low from the catalogue', (tester) async {
+    await _pumpHome(tester, authRepository, itemRepository);
+
+    expect(find.byType(RunningLowSection), findsOneWidget);
+    expect(itemRepository.watchCalls, 1);
+
+    itemRepository.emitItems([
+      testItem(lowThreshold: 2).copyWith(stockAtBaseline: 1, dailyUsage: 0),
+    ]);
+    await tester.pump();
+
+    expect(find.text('Rice'), findsOneWidget);
+    expect(find.text('Below 2 kg'), findsOneWidget);
+  });
+
+  testWidgets('re-judges running low when the app resumes', (tester) async {
+    final baseline = DateTime(2026, 9, 1, 10, 30);
+    var now = baseline;
+    final cubit = RunningLowCubit(itemRepository, clock: () => now);
+    addTearDown(cubit.close);
+    await tester.pumpWidget(
+      BlocProvider.value(
+        value: cubit,
+        child: const MaterialApp(home: HomeView(user: testUser)),
+      ),
+    );
+    // Half a kilo a day from 3 kg against a threshold of 2: not low at the
+    // baseline, low three days later, with no write to the item between.
+    itemRepository.emitItems([
+      testItem(
+        name: 'Pasta',
+        dailyUsage: 0.5,
+        lowThreshold: 2,
+      ).copyWith(stockAtBaseline: 3, baselineDate: baseline),
+    ]);
+    await tester.pump();
+    expect(find.text('Nothing is running low'), findsOneWidget);
+
+    now = baseline.add(const Duration(days: 3));
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    await tester.pump();
+
+    expect(find.text('Pasta'), findsOneWidget);
+    expect(find.text('1.5 kg'), findsOneWidget);
   });
 }

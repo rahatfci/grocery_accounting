@@ -7,8 +7,10 @@ import 'package:grocery_accounting/features/auth/presentation/auth_cubit.dart';
 import 'package:grocery_accounting/features/auth/presentation/auth_gate.dart';
 import 'package:grocery_accounting/features/auth/presentation/sign_in_page.dart';
 import 'package:grocery_accounting/features/home/presentation/home_page.dart';
+import 'package:grocery_accounting/features/items/data/item_repository.dart';
 import 'package:grocery_accounting/features/members/data/member_repository.dart';
 
+import '../../items/fake_item_repository.dart';
 import '../../members/fake_member_repository.dart';
 import '../fake_auth_repository.dart';
 
@@ -19,8 +21,14 @@ Future<void> _pumpGate(
 ) async {
   await tester.pumpWidget(
     MaterialApp(
-      home: RepositoryProvider<MemberRepository>.value(
-        value: members,
+      // Home watches the catalogue for running low as soon as it mounts.
+      home: MultiRepositoryProvider(
+        providers: [
+          RepositoryProvider<MemberRepository>.value(value: members),
+          RepositoryProvider<ItemRepository>.value(
+            value: FakeItemRepository()..initialItems = const [],
+          ),
+        ],
         child: BlocProvider(
           create: (_) => AuthCubit(repository),
           child: const AuthGate(),
