@@ -1,6 +1,9 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:grocery_accounting/features/reports/data/csv_sharer.dart';
 import 'package:grocery_accounting/core/data_failure.dart';
 import 'package:grocery_accounting/core/widgets/failure_message.dart';
 import 'package:grocery_accounting/features/purchases/logic/money.dart';
@@ -11,6 +14,7 @@ import 'package:grocery_accounting/features/reports/presentation/reports_page.da
 import '../../items/fake_item_repository.dart';
 import '../../members/fake_member_repository.dart';
 import '../../purchases/fake_purchase_repository.dart';
+import '../fake_csv_sharer.dart';
 
 void main() {
   /// A fixed clock, so the current month is September 2026 in every test.
@@ -19,11 +23,13 @@ void main() {
   late FakePurchaseRepository purchases;
   late FakeItemRepository items;
   late FakeMemberRepository members;
+  late FakeCsvSharer sharer;
 
   setUp(() {
     purchases = FakePurchaseRepository();
     items = FakeItemRepository();
     members = FakeMemberRepository();
+    sharer = FakeCsvSharer();
   });
 
   Future<void> pumpReports(WidgetTester tester) async {
@@ -34,6 +40,7 @@ void main() {
             purchases: purchases,
             items: items,
             members: members,
+            sharer: sharer,
             now: () => now,
           ),
           child: const ReportsView(),
@@ -342,6 +349,81 @@ void main() {
       expect(find.text('By category'), findsOneWidget);
       expect(find.text('By shop'), findsOneWidget);
       expect(find.text('Compared with August 2026'), findsOneWidget);
+    });
+  });
+
+  group('export', () {
+    IconButton exportButton(WidgetTester tester) => tester.widget<IconButton>(
+      find.widgetWithIcon(IconButton, Icons.ios_share),
+    );
+
+    testWidgets('is disabled until a month with purchases has loaded', (
+      tester,
+    ) async {
+      await pumpReports(tester);
+
+      expect(exportButton(tester).onPressed, isNull);
+
+      await reportAll(tester);
+
+      expect(exportButton(tester).onPressed, isNull);
+    });
+
+    testWidgets('exports the month on screen', (tester) async {
+      await pumpReports(tester);
+      await reportAll(
+        tester,
+        window: [testPurchase(date: DateTime(2026, 9, 10), shopName: 'Conad')],
+      );
+
+      await tester.tap(find.byTooltip('Export CSV'));
+      await tester.pump();
+
+      expect(sharer.shared.single.fileName, 'grocery-2026-09.csv');
+      expect(sharer.shared.single.csv, contains('Conad'));
+    });
+
+    testWidgets('shows progress while sharing', (tester) async {
+      sharer.gate = Completer<void>();
+      await pumpReports(tester);
+      await reportAll(
+        tester,
+        window: [testPurchase(date: DateTime(2026, 9, 10))],
+      );
+
+      await tester.tap(find.byTooltip('Export CSV'));
+      await tester.pump();
+
+      expect(find.byTooltip('Export CSV'), findsNothing);
+      expect(
+        find.descendant(
+          of: find.byType(AppBar),
+          matching: find.byType(CircularProgressIndicator),
+        ),
+        findsOneWidget,
+      );
+
+      sharer.gate?.complete();
+      await tester.pump();
+
+      expect(find.byTooltip('Export CSV'), findsOneWidget);
+    });
+
+    testWidgets('a failed share says so', (tester) async {
+      sharer.outcome = CsvShareFailed(StateError('plugin'), StackTrace.empty);
+      await pumpReports(tester);
+      await reportAll(
+        tester,
+        window: [testPurchase(date: DateTime(2026, 9, 10))],
+      );
+
+      await tester.tap(find.byTooltip('Export CSV'));
+      await tester.pump();
+
+      expect(
+        find.text('Could not share the export. Try again'),
+        findsOneWidget,
+      );
     });
   });
 }

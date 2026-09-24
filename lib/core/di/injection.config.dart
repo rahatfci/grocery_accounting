@@ -56,6 +56,10 @@ import 'package:grocery_accounting/features/reminders/data/local_run_out_notifie
     as _i360;
 import 'package:grocery_accounting/features/reminders/data/run_out_notifier.dart'
     as _i582;
+import 'package:grocery_accounting/features/reports/data/csv_sharer.dart'
+    as _i762;
+import 'package:grocery_accounting/features/reports/data/share_plus_csv_sharer.dart'
+    as _i764;
 import 'package:grocery_accounting/features/shopping_list/data/firestore_shopping_list_repository.dart'
     as _i575;
 import 'package:grocery_accounting/features/shopping_list/data/shopping_list_repository.dart'
@@ -82,6 +86,7 @@ extension GetItInjectableX on _i174.GetIt {
     gh.lazySingleton<_i163.FlutterLocalNotificationsPlugin>(
       () => notificationsModule.notifications,
     );
+    gh.lazySingleton<_i762.CsvSharer>(() => _i764.SharePlusCsvSharer());
     gh.lazySingleton<_i691.ReceiptReader>(
       () => _i1045.MlKitReceiptReader(gh<_i612.TextRecognizer>()),
     );

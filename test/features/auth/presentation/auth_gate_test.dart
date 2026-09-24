@@ -14,12 +14,14 @@ import 'package:grocery_accounting/features/receipts/data/alias_repository.dart'
 import 'package:grocery_accounting/features/receipts/data/receipt_picker.dart';
 import 'package:grocery_accounting/features/receipts/data/receipt_reader.dart';
 import 'package:grocery_accounting/features/receipts/data/receipt_store.dart';
+import 'package:grocery_accounting/features/reports/data/csv_sharer.dart';
 import 'package:grocery_accounting/features/shopping_list/data/shopping_list_repository.dart';
 
 import '../../items/fake_item_repository.dart';
 import '../../members/fake_member_repository.dart';
 import '../../reminders/fake_run_out_notifier.dart';
 import '../../receipts/fake_receipts.dart';
+import '../../reports/fake_csv_sharer.dart';
 import '../../shopping_list/fake_shopping_list_repository.dart';
 import '../fake_auth_repository.dart';
 
@@ -48,6 +50,7 @@ Future<void> _pumpGate(
           RepositoryProvider<AliasRepository>.value(
             value: FakeAliasRepository(),
           ),
+          RepositoryProvider<CsvSharer>.value(value: FakeCsvSharer()),
         ],
         child: BlocProvider(
           create: (_) => AuthCubit(repository),

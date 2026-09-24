@@ -12,6 +12,7 @@ import 'features/receipts/data/alias_repository.dart';
 import 'features/receipts/data/receipt_picker.dart';
 import 'features/receipts/data/receipt_reader.dart';
 import 'features/receipts/data/receipt_store.dart';
+import 'features/reports/data/csv_sharer.dart';
 import 'features/reminders/data/run_out_notifier.dart';
 import 'features/shopping_list/data/shopping_list_repository.dart';
 import 'firebase_options.dart';
@@ -40,6 +41,7 @@ Future<void> main() async {
       receiptStore: getIt<ReceiptStore>(),
       receiptReader: getIt<ReceiptReader>(),
       aliasRepository: getIt<AliasRepository>(),
+      csvSharer: getIt<CsvSharer>(),
     ),
   );
 }

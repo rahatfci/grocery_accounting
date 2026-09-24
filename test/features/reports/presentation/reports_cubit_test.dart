@@ -2,12 +2,14 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:grocery_accounting/core/data_failure.dart';
 import 'package:grocery_accounting/features/purchases/logic/purchase.dart';
+import 'package:grocery_accounting/features/reports/data/csv_sharer.dart';
 import 'package:grocery_accounting/features/reports/presentation/reports_cubit.dart';
 import 'package:grocery_accounting/features/reports/presentation/reports_state.dart';
 
 import '../../items/fake_item_repository.dart';
 import '../../members/fake_member_repository.dart';
 import '../../purchases/fake_purchase_repository.dart';
+import '../fake_csv_sharer.dart';
 
 /// Records what a cubit reports through `addError`, which is how an
 /// unexpected failure is meant to leave the app rather than being swallowed.
@@ -32,12 +34,14 @@ void main() {
   late FakePurchaseRepository purchases;
   late FakeItemRepository items;
   late FakeMemberRepository members;
+  late FakeCsvSharer sharer;
   late RecordingBlocObserver observer;
 
   setUp(() {
     purchases = FakePurchaseRepository();
     items = FakeItemRepository();
     members = FakeMemberRepository();
+    sharer = FakeCsvSharer();
     observer = RecordingBlocObserver();
     Bloc.observer = observer;
   });
@@ -48,6 +52,7 @@ void main() {
     purchases: purchases,
     items: items,
     members: members,
+    sharer: sharer,
     now: () => now,
   );
 
@@ -336,5 +341,69 @@ void main() {
     expect(purchases.hasWindowListener, isFalse);
     expect(items.hasListener, isFalse);
     expect(members.hasListener, isFalse);
+  });
+
+  group('exportMonth', () {
+    test('shares the month on screen as CSV', () async {
+      final cubit = build();
+      await reportAll(
+        cubit,
+        window: [
+          testPurchase(
+            id: 'sep',
+            date: DateTime(2026, 9, 10),
+            shopName: 'Conad',
+          ),
+          testPurchase(
+            id: 'aug',
+            date: DateTime(2026, 8, 10),
+            shopName: 'Lidl',
+          ),
+        ],
+      );
+
+      final message = await cubit.exportMonth();
+
+      expect(message, isNull);
+      final shared = sharer.shared.single;
+      expect(shared.fileName, 'grocery-2026-09.csv');
+      expect(shared.csv, contains('Conad'));
+      // The window also holds last month, for the comparison; it is not
+      // exported.
+      expect(shared.csv, isNot(contains('Lidl')));
+      await cubit.close();
+    });
+
+    test('does nothing before the month has loaded', () async {
+      final cubit = build();
+
+      expect(await cubit.exportMonth(), isNull);
+      expect(sharer.shared, isEmpty);
+      await cubit.close();
+    });
+
+    test('a dismissed share sheet is not an error', () async {
+      final cubit = build();
+      await reportAll(cubit);
+      sharer.outcome = const CsvShareDismissed();
+
+      expect(await cubit.exportMonth(), isNull);
+      expect(observer.reported, isEmpty);
+      await cubit.close();
+    });
+
+    test('a failed share says so and reports the cause', () async {
+      final cubit = build();
+      await reportAll(cubit);
+      final cause = StateError('plugin');
+      sharer.outcome = CsvShareFailed(cause, StackTrace.empty);
+
+      expect(
+        await cubit.exportMonth(),
+        'Could not share the export. Try again',
+      );
+      expect(observer.reported, [cause]);
+      await cubit.close();
+    });
   });
 }

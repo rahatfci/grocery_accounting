@@ -9,6 +9,8 @@ import '../../members/data/member_repository.dart';
 import '../../members/logic/household_member.dart';
 import '../../purchases/data/purchase_repository.dart';
 import '../../purchases/logic/purchase.dart';
+import '../data/csv_sharer.dart';
+import '../logic/purchases_csv.dart';
 import '../logic/report_month.dart';
 import '../logic/spending_report.dart';
 import 'reports_state.dart';
@@ -21,6 +23,7 @@ class ReportsCubit extends Cubit<ReportsState> {
     required this._purchases,
     required this._items,
     required this._members,
+    required this._sharer,
     DateTime Function() now = DateTime.now,
   }) : _now = now,
        super(
@@ -34,6 +37,7 @@ class ReportsCubit extends Cubit<ReportsState> {
   final PurchaseRepository _purchases;
   final ItemRepository _items;
   final MemberRepository _members;
+  final CsvSharer _sharer;
   final DateTime Function() _now;
 
   /// Read back off the state rather than duplicated in a field, so the month
@@ -49,6 +53,42 @@ class ReportsCubit extends Cubit<ReportsState> {
   StreamSubscription<List<Purchase>>? _windowSubscription;
   StreamSubscription<List<Item>>? _itemsSubscription;
   StreamSubscription<List<HouseholdMember>>? _membersSubscription;
+
+  /// Shares the month on screen as CSV, and returns what to tell the member
+  /// when it failed. Nothing happens until the month has loaded.
+  ///
+  /// Built from the purchases already on screen, so exporting never waits on
+  /// or disturbs the report.
+  Future<String?> exportMonth() async {
+    final window = _window;
+    final items = _catalogue;
+    final members = _household;
+    if (state is! ReportsLoaded ||
+        window == null ||
+        items == null ||
+        members == null) {
+      return null;
+    }
+    final month = _month;
+    final outcome = await _sharer.share(
+      fileName: monthCsvFileName(month),
+      csv: monthCsv(
+        month: month,
+        purchases: window,
+        items: items,
+        members: members,
+      ),
+    );
+    switch (outcome) {
+      case CsvShared() || CsvShareDismissed():
+        return null;
+      case CsvShareFailed(:final cause, :final stackTrace):
+        if (!isClosed) {
+          addError(cause, stackTrace);
+        }
+        return 'Could not share the export. Try again';
+    }
+  }
 
   void showPreviousMonth() => _showMonth(previousMonth(_month));
 

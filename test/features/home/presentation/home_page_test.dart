@@ -19,6 +19,7 @@ import 'package:grocery_accounting/features/receipts/data/receipt_picker.dart';
 import 'package:grocery_accounting/features/receipts/data/receipt_reader.dart';
 import 'package:grocery_accounting/features/receipts/data/receipt_store.dart';
 import 'package:grocery_accounting/features/receipts/presentation/receipt_uploads_cubit.dart';
+import 'package:grocery_accounting/features/reports/data/csv_sharer.dart';
 import 'package:grocery_accounting/features/shopping_list/data/shopping_list_repository.dart';
 import 'package:grocery_accounting/features/shopping_list/presentation/shopping_list_cubit.dart';
 import 'package:grocery_accounting/features/shopping_list/presentation/shopping_list_section.dart';
@@ -29,6 +30,7 @@ import '../../members/fake_member_repository.dart';
 import '../../purchases/fake_purchase_repository.dart';
 import '../../reminders/fake_run_out_notifier.dart';
 import '../../receipts/fake_receipts.dart';
+import '../../reports/fake_csv_sharer.dart';
 import '../../shopping_list/fake_shopping_list_repository.dart';
 
 Future<void> _pumpHome(
@@ -69,6 +71,7 @@ Future<void> _pumpHome(
         ),
         RepositoryProvider<ReceiptReader>.value(value: FakeReceiptReader()),
         RepositoryProvider<AliasRepository>.value(value: FakeAliasRepository()),
+        RepositoryProvider<CsvSharer>.value(value: FakeCsvSharer()),
       ],
       child: BlocProvider(
         create: (_) => AuthCubit(authRepository),

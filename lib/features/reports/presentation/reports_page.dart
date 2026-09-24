@@ -6,6 +6,7 @@ import '../../items/data/item_repository.dart';
 import '../../members/data/member_repository.dart';
 import '../../purchases/data/purchase_repository.dart';
 import '../../purchases/logic/money.dart';
+import '../data/csv_sharer.dart';
 import '../logic/report_month.dart';
 import '../logic/spending_report.dart';
 import 'reports_cubit.dart';
@@ -22,6 +23,7 @@ class ReportsPage extends StatelessWidget {
         purchases: context.read<PurchaseRepository>(),
         items: context.read<ItemRepository>(),
         members: context.read<MemberRepository>(),
+        sharer: context.read<CsvSharer>(),
       ),
       child: const ReportsView(),
     );
@@ -36,7 +38,10 @@ class ReportsView extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Spending')),
+      appBar: AppBar(
+        title: const Text('Spending'),
+        actions: const [_ExportButton()],
+      ),
       body: SafeArea(
         child: BlocBuilder<ReportsCubit, ReportsState>(
           builder: (context, state) => Column(
@@ -58,6 +63,58 @@ class ReportsView extends StatelessWidget {
             ],
           ),
         ),
+      ),
+    );
+  }
+}
+
+/// Shares the month on screen as CSV. Only offered once the month has loaded
+/// with something in it, since a file of headers helps nobody.
+class _ExportButton extends StatefulWidget {
+  const _ExportButton();
+
+  @override
+  State<_ExportButton> createState() => _ExportButtonState();
+}
+
+class _ExportButtonState extends State<_ExportButton> {
+  bool _exporting = false;
+
+  Future<void> _export() async {
+    final cubit = context.read<ReportsCubit>();
+    final messenger = ScaffoldMessenger.of(context);
+    setState(() => _exporting = true);
+
+    final message = await cubit.exportMonth();
+
+    if (!mounted) {
+      return;
+    }
+    setState(() => _exporting = false);
+    if (message != null) {
+      messenger.showSnackBar(SnackBar(content: Text(message)));
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_exporting) {
+      return const Padding(
+        padding: EdgeInsets.all(14),
+        child: SizedBox.square(
+          dimension: 20,
+          child: CircularProgressIndicator(strokeWidth: 2),
+        ),
+      );
+    }
+    return BlocBuilder<ReportsCubit, ReportsState>(
+      builder: (context, state) => IconButton(
+        icon: const Icon(Icons.ios_share),
+        tooltip: 'Export CSV',
+        onPressed: switch (state) {
+          ReportsLoaded(:final report) when !report.isEmpty => _export,
+          _ => null,
+        },
       ),
     );
   }

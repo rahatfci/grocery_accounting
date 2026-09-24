@@ -11,6 +11,7 @@ import 'features/receipts/data/alias_repository.dart';
 import 'features/receipts/data/receipt_picker.dart';
 import 'features/receipts/data/receipt_reader.dart';
 import 'features/receipts/data/receipt_store.dart';
+import 'features/reports/data/csv_sharer.dart';
 import 'features/reminders/data/run_out_notifier.dart';
 import 'features/shopping_list/data/shopping_list_repository.dart';
 
@@ -26,6 +27,7 @@ class GroceryAccountingApp extends StatelessWidget {
     required this.receiptStore,
     required this.receiptReader,
     required this.aliasRepository,
+    required this.csvSharer,
     super.key,
   });
 
@@ -65,6 +67,9 @@ class GroceryAccountingApp extends StatelessWidget {
   /// mappings from it.
   final AliasRepository aliasRepository;
 
+  /// Resolved in `main` as well. The spending report exports through it.
+  final CsvSharer csvSharer;
+
   @override
   Widget build(BuildContext context) {
     return MultiRepositoryProvider(
@@ -78,6 +83,7 @@ class GroceryAccountingApp extends StatelessWidget {
         RepositoryProvider.value(value: receiptStore),
         RepositoryProvider.value(value: receiptReader),
         RepositoryProvider.value(value: aliasRepository),
+        RepositoryProvider.value(value: csvSharer),
       ],
       child: BlocProvider(
         create: (_) => authCubit,
