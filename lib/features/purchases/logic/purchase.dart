@@ -63,7 +63,10 @@ final class Purchase extends Equatable {
   /// A `users/{userId}` id.
   final String paidByUserId;
 
-  /// Firebase Storage path, filled in by feature 9.
+  /// Where the receipt photo is stored in Supabase Storage, or null when the
+  /// purchase has none. On phones it is recorded with the purchase while the
+  /// photo may still be queued on the device; on web only once it has
+  /// uploaded.
   final String? receiptImagePath;
 
   final PurchaseSource source;
