@@ -7,6 +7,7 @@ import 'features/auth/presentation/auth_gate.dart';
 import 'features/items/data/item_repository.dart';
 import 'features/members/data/member_repository.dart';
 import 'features/purchases/data/purchase_repository.dart';
+import 'features/receipts/data/alias_repository.dart';
 import 'features/receipts/data/receipt_picker.dart';
 import 'features/receipts/data/receipt_reader.dart';
 import 'features/receipts/data/receipt_store.dart';
@@ -24,6 +25,7 @@ class GroceryAccountingApp extends StatelessWidget {
     required this.receiptPicker,
     required this.receiptStore,
     required this.receiptReader,
+    required this.aliasRepository,
     super.key,
   });
 
@@ -59,6 +61,10 @@ class GroceryAccountingApp extends StatelessWidget {
   /// Resolved in `main` as well. The purchase screen reads receipts through it.
   final ReceiptReader receiptReader;
 
+  /// Resolved in `main` as well. The purchase screen applies learned receipt
+  /// mappings from it.
+  final AliasRepository aliasRepository;
+
   @override
   Widget build(BuildContext context) {
     return MultiRepositoryProvider(
@@ -71,6 +77,7 @@ class GroceryAccountingApp extends StatelessWidget {
         RepositoryProvider.value(value: receiptPicker),
         RepositoryProvider.value(value: receiptStore),
         RepositoryProvider.value(value: receiptReader),
+        RepositoryProvider.value(value: aliasRepository),
       ],
       child: BlocProvider(
         create: (_) => authCubit,

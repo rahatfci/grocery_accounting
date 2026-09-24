@@ -238,6 +238,7 @@ void main() {
         quantity: 2,
         unit: ItemUnit.pcs,
         lineTotal: 2.58,
+        quantityRead: true,
       ),
       ScannedLine(
         rawText: 'PANE CASERECCIO',
@@ -250,6 +251,7 @@ void main() {
         quantity: 0.45,
         unit: ItemUnit.kg,
         lineTotal: 2.66,
+        quantityRead: true,
       ),
     ]);
   });

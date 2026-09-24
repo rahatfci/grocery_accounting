@@ -42,11 +42,13 @@ void main() {
   late FakeReceiptPicker receiptPicker;
   late FakeReceiptStore receipts;
   late FakeReceiptReader receiptReader;
+  late FakeAliasRepository aliases;
 
   setUp(() {
     receiptPicker = FakeReceiptPicker();
     receipts = FakeReceiptStore();
     receiptReader = FakeReceiptReader();
+    aliases = FakeAliasRepository();
     purchases = FakePurchaseRepository();
     items = FakeItemRepository();
     members = FakeMemberRepository();
@@ -68,6 +70,7 @@ void main() {
       receiptPicker: receiptPicker,
       receipts: receipts,
       receiptReader: receiptReader,
+      aliases: aliases,
       currentUser: testUser,
       now: () => _now,
     );
@@ -510,6 +513,7 @@ void main() {
         receiptPicker: receiptPicker,
         receipts: receipts,
         receiptReader: receiptReader,
+        aliases: aliases,
         currentUser: testUser,
         now: () => _now,
       );

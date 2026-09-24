@@ -5,8 +5,11 @@ import '../../../core/data_failure.dart';
 import '../../../core/result.dart';
 import '../../items/data/item_dto.dart';
 import '../../items/logic/stock.dart';
+import '../../receipts/data/alias_dto.dart';
+import '../../receipts/logic/receipt_alias.dart';
 import '../logic/purchase.dart';
 import '../logic/purchase_draft.dart';
+import '../logic/receipt_matching.dart';
 import 'purchase_dto.dart';
 import 'purchase_repository.dart';
 
@@ -80,6 +83,21 @@ class FirestorePurchaseRepository implements PurchaseRepository {
           'baselineDate': baselineDate,
         });
       }
+    }
+
+    // What this purchase teaches about its receipt lines, in the same batch,
+    // so a purchase and its lesson cannot land apart. The id is derived from
+    // the wording, so relearning overwrites instead of adding a duplicate.
+    for (final alias in learnedAliases(
+      draft,
+      resolveItemId: (item) => documents[restockKey(item)]?.id,
+    )) {
+      batch.set(
+        _firestore
+            .collection('aliases')
+            .doc(aliasDocumentId(alias.rawTextNormalized)),
+        aliasToFirestore(alias),
+      );
     }
 
     // Deleting an entry another device already removed is a no-op, so a

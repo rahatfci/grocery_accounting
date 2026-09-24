@@ -34,6 +34,7 @@ final class ScannedLine extends Equatable {
     required this.quantity,
     required this.unit,
     required this.lineTotal,
+    this.quantityRead = false,
   });
 
   /// The receipt's own wording, kept so a mis-mapping stays diagnosable.
@@ -42,15 +43,20 @@ final class ScannedLine extends Equatable {
   final ItemUnit unit;
   final double lineTotal;
 
+  /// Whether the receipt printed the quantity. When it did not, the 1 piece
+  /// here is only a placeholder that a learned alias may replace.
+  final bool quantityRead;
+
   ScannedLine withQuantity(double quantity, ItemUnit unit) => ScannedLine(
     rawText: rawText,
     quantity: quantity,
     unit: unit,
     lineTotal: lineTotal,
+    quantityRead: true,
   );
 
   @override
-  List<Object?> get props => [rawText, quantity, unit, lineTotal];
+  List<Object?> get props => [rawText, quantity, unit, lineTotal, quantityRead];
 }
 
 /// What could be read off a receipt. Every part is optional: whatever is not

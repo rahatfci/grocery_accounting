@@ -8,6 +8,7 @@ import 'features/auth/presentation/auth_cubit.dart';
 import 'features/items/data/item_repository.dart';
 import 'features/members/data/member_repository.dart';
 import 'features/purchases/data/purchase_repository.dart';
+import 'features/receipts/data/alias_repository.dart';
 import 'features/receipts/data/receipt_picker.dart';
 import 'features/receipts/data/receipt_reader.dart';
 import 'features/receipts/data/receipt_store.dart';
@@ -38,6 +39,7 @@ Future<void> main() async {
       receiptPicker: getIt<ReceiptPicker>(),
       receiptStore: getIt<ReceiptStore>(),
       receiptReader: getIt<ReceiptReader>(),
+      aliasRepository: getIt<AliasRepository>(),
     ),
   );
 }

@@ -8,6 +8,7 @@ import '../../items/logic/item.dart';
 import '../../items/logic/item_validation.dart';
 import '../../members/data/member_repository.dart';
 import '../../members/logic/household_member.dart';
+import '../../receipts/data/alias_repository.dart';
 import '../../receipts/data/receipt_picker.dart';
 import '../../receipts/data/receipt_reader.dart';
 import '../../receipts/data/receipt_store.dart';
@@ -47,6 +48,7 @@ class RecordPurchasePage extends StatelessWidget {
         receiptPicker: context.read<ReceiptPicker>(),
         receipts: context.read<ReceiptStore>(),
         receiptReader: context.read<ReceiptReader>(),
+        aliases: context.read<AliasRepository>(),
         currentUser: user,
       ),
       child: switch (startWith) {

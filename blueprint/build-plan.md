@@ -30,7 +30,7 @@ order it runs in. The review screen is the feature; the scanner prefills it.
 
 - [x] 9. **Receipt capture** - photograph the scontrino, store it, attach it to a purchase, queue the upload when offline.
 - [x] 10. **On device receipt reading** - ML Kit text recognition plus a parser for total, date and line items, prefilling the review screen on Android and iOS.
-- [ ] 11. **Learned receipt mapping** - the alias table, so a receipt line mapped once to an item and quantity resolves automatically every time after.
+- [x] 11. **Learned receipt mapping** - the alias table, so a receipt line mapped once to an item and quantity resolves automatically every time after.
 
 ## Milestone 6 - Finish
 

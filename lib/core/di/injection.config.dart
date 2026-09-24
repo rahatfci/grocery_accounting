@@ -36,6 +36,10 @@ import 'package:grocery_accounting/features/purchases/data/firestore_purchase_re
     as _i716;
 import 'package:grocery_accounting/features/purchases/data/purchase_repository.dart'
     as _i384;
+import 'package:grocery_accounting/features/receipts/data/alias_repository.dart'
+    as _i267;
+import 'package:grocery_accounting/features/receipts/data/firestore_alias_repository.dart'
+    as _i914;
 import 'package:grocery_accounting/features/receipts/data/image_picker_receipt_picker.dart'
     as _i179;
 import 'package:grocery_accounting/features/receipts/data/ml_kit_receipt_reader.dart'
@@ -92,6 +96,9 @@ extension GetItInjectableX on _i174.GetIt {
     );
     gh.lazySingleton<_i472.ReceiptPicker>(
       () => _i179.ImagePickerReceiptPicker(gh<_i183.ImagePicker>()),
+    );
+    gh.lazySingleton<_i267.AliasRepository>(
+      () => _i914.FirestoreAliasRepository(gh<_i974.FirebaseFirestore>()),
     );
     gh.lazySingleton<_i384.PurchaseRepository>(
       () => _i716.FirestorePurchaseRepository(gh<_i974.FirebaseFirestore>()),

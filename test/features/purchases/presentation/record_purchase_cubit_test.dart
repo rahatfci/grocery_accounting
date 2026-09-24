@@ -7,6 +7,8 @@ import 'package:grocery_accounting/core/result.dart';
 import 'package:grocery_accounting/features/items/logic/item.dart';
 import 'package:grocery_accounting/features/items/logic/item_unit.dart';
 import 'package:grocery_accounting/features/purchases/logic/purchase_draft.dart';
+import 'package:grocery_accounting/features/purchases/logic/receipt_matching.dart';
+import 'package:grocery_accounting/features/receipts/logic/receipt_alias.dart';
 import 'package:grocery_accounting/features/purchases/presentation/record_purchase_cubit.dart';
 import 'package:grocery_accounting/features/purchases/presentation/record_purchase_state.dart';
 import 'package:grocery_accounting/features/receipts/data/receipt_picker.dart';
@@ -41,11 +43,13 @@ void main() {
   late FakeReceiptPicker receiptPicker;
   late FakeReceiptStore receipts;
   late FakeReceiptReader receiptReader;
+  late FakeAliasRepository aliases;
 
   setUp(() {
     receiptPicker = FakeReceiptPicker();
     receipts = FakeReceiptStore();
     receiptReader = FakeReceiptReader();
+    aliases = FakeAliasRepository();
     purchases = FakePurchaseRepository();
     items = FakeItemRepository();
     members = FakeMemberRepository();
@@ -61,6 +65,7 @@ void main() {
       receiptPicker: receiptPicker,
       receipts: receipts,
       receiptReader: receiptReader,
+      aliases: aliases,
       currentUser: testUser,
       now: () => _now,
     );
@@ -416,6 +421,7 @@ void main() {
       receiptPicker: receiptPicker,
       receipts: receipts,
       receiptReader: receiptReader,
+      aliases: aliases,
       currentUser: testUser,
       now: () => _now,
     );
@@ -846,6 +852,91 @@ void main() {
       final committed = purchases.committed.single;
       expect(committed.scanned, isTrue);
       expect(committed.lines.where((l) => !l.isMatched), hasLength(2));
+    });
+  });
+
+  group('learned receipt mapping', () {
+    final eggs = testItem(id: 'eggs', name: 'Eggs', unit: ItemUnit.pcs);
+    const eggsAlias = ReceiptAlias(
+      rawTextNormalized: 'UOVA FRESCHE',
+      itemId: 'eggs',
+      defaultQuantity: 6,
+      defaultUnit: ItemUnit.pcs,
+      shopName: 'Conad',
+    );
+    const reading = ReceiptReading(
+      lines: [
+        ScannedLine(
+          rawText: 'UOVA FRESCHE',
+          quantity: 1,
+          unit: ItemUnit.pcs,
+          lineTotal: 2.99,
+        ),
+        ScannedLine(
+          rawText: 'LATTE PS',
+          quantity: 1,
+          unit: ItemUnit.pcs,
+          lineTotal: 1.29,
+        ),
+      ],
+    );
+
+    test('a known wording arrives matched, an unknown one does not', () async {
+      final cubit = await ready(catalogue: [eggs]);
+      aliases.emitAliases([eggsAlias]);
+      await pumpEventQueue();
+      receiptReader.result = const Ok(reading);
+
+      await cubit.pickReceipt(ReceiptSource.camera);
+
+      final lines = draftOf(cubit).lines;
+      expect(lines.first.item, eggs);
+      expect(lines.first.quantity, 6);
+      expect(lines.first.scannedText, 'UOVA FRESCHE');
+      expect(lines.last.isMatched, isFalse);
+    });
+
+    test('an alias failure is reported and changes nothing', () async {
+      final observer = _RecordingObserver();
+      Bloc.observer = observer;
+      addTearDown(() => Bloc.observer = _RecordingObserver());
+      final cubit = await ready(catalogue: [eggs]);
+      aliases.emitError(const ConnectionUnavailable());
+      await pumpEventQueue();
+      receiptReader.result = const Ok(reading);
+
+      await cubit.pickReceipt(ReceiptSource.camera);
+
+      expect(observer.reported, [const ConnectionUnavailable()]);
+      expect(cubit.state, isA<RecordPurchaseReady>());
+      expect(draftOf(cubit).lines.every((l) => !l.isMatched), isTrue);
+    });
+
+    test('saving a matched scanned line teaches it', () async {
+      final cubit = await ready(catalogue: [eggs]);
+      aliases.emitAliases([eggsAlias]);
+      await pumpEventQueue();
+      receiptReader.result = const Ok(reading);
+      await cubit.pickReceipt(ReceiptSource.camera);
+      cubit.setShopName('Lidl');
+      cubit.setTotalText('4,28');
+
+      expect(await cubit.commit(), const CommitSucceeded());
+      final taught = learnedAliases(
+        purchases.committed.single,
+        resolveItemId: (item) => item.id,
+      );
+      expect(taught.single.rawTextNormalized, 'UOVA FRESCHE');
+      expect(taught.single.shopName, 'Lidl');
+    });
+
+    test('retry and close manage the alias watch too', () async {
+      final cubit = build();
+      cubit.retry();
+      expect(aliases.watchCalls, 2);
+
+      await cubit.close();
+      expect(aliases.hasListener, isFalse);
     });
   });
 }

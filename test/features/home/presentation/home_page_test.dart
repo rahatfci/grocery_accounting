@@ -14,6 +14,7 @@ import 'package:grocery_accounting/features/purchases/presentation/record_purcha
 import 'package:grocery_accounting/features/reminders/data/run_out_notifier.dart';
 import 'package:grocery_accounting/features/reminders/presentation/run_out_reminders_cubit.dart';
 import 'package:grocery_accounting/features/reports/presentation/reports_page.dart';
+import 'package:grocery_accounting/features/receipts/data/alias_repository.dart';
 import 'package:grocery_accounting/features/receipts/data/receipt_picker.dart';
 import 'package:grocery_accounting/features/receipts/data/receipt_reader.dart';
 import 'package:grocery_accounting/features/receipts/data/receipt_store.dart';
@@ -67,6 +68,7 @@ Future<void> _pumpHome(
           value: receiptStore ?? FakeReceiptStore(),
         ),
         RepositoryProvider<ReceiptReader>.value(value: FakeReceiptReader()),
+        RepositoryProvider<AliasRepository>.value(value: FakeAliasRepository()),
       ],
       child: BlocProvider(
         create: (_) => AuthCubit(authRepository),

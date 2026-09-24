@@ -3,10 +3,12 @@ import 'dart:typed_data';
 
 import 'package:grocery_accounting/core/data_failure.dart';
 import 'package:grocery_accounting/core/result.dart';
+import 'package:grocery_accounting/features/receipts/data/alias_repository.dart';
 import 'package:grocery_accounting/features/receipts/data/receipt_picker.dart';
 import 'package:grocery_accounting/features/receipts/data/receipt_reader.dart';
 import 'package:grocery_accounting/features/receipts/data/receipt_store.dart';
 import 'package:grocery_accounting/features/receipts/logic/receipt.dart';
+import 'package:grocery_accounting/features/receipts/logic/receipt_alias.dart';
 import 'package:grocery_accounting/features/receipts/logic/receipt_reading.dart';
 
 /// A photo with a JPEG header, so it sniffs as one.
@@ -82,5 +84,27 @@ class FakeReceiptReader implements ReceiptReader {
     reads.add(photo);
     await gate?.future;
     return result;
+  }
+}
+
+class FakeAliasRepository implements AliasRepository {
+  final _controllers = <StreamController<Map<String, ReceiptAlias>>>[];
+
+  int get watchCalls => _controllers.length;
+
+  bool get hasListener =>
+      _controllers.isNotEmpty && _controllers.last.hasListener;
+
+  void emitAliases(List<ReceiptAlias> aliases) => _controllers.last.add({
+    for (final alias in aliases) alias.rawTextNormalized: alias,
+  });
+
+  void emitError(Object error) => _controllers.last.addError(error);
+
+  @override
+  Stream<Map<String, ReceiptAlias>> watchAliases() {
+    final controller = StreamController<Map<String, ReceiptAlias>>();
+    _controllers.add(controller);
+    return controller.stream;
   }
 }

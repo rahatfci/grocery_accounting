@@ -10,16 +10,19 @@ import '../../items/data/item_repository.dart';
 import '../../items/logic/item.dart';
 import '../../members/data/member_repository.dart';
 import '../../members/logic/household_member.dart';
+import '../../receipts/data/alias_repository.dart';
 import '../../receipts/data/receipt_picker.dart';
 import '../../receipts/data/receipt_reader.dart';
 import '../../receipts/data/receipt_store.dart';
 import '../../receipts/logic/receipt.dart';
+import '../../receipts/logic/receipt_alias.dart';
 import '../../receipts/logic/receipt_reading.dart';
 import '../../shopping_list/data/shopping_list_repository.dart';
 import '../../shopping_list/logic/shopping_entry.dart';
 import '../../shopping_list/logic/shopping_match.dart';
 import '../data/purchase_repository.dart';
 import '../logic/purchase_draft.dart';
+import '../logic/receipt_matching.dart';
 import '../logic/purchase_validation.dart';
 import 'record_purchase_state.dart';
 
@@ -34,6 +37,7 @@ class RecordPurchaseCubit extends Cubit<RecordPurchaseState> {
     required this._receiptPicker,
     required this._receipts,
     required this._receiptReader,
+    required this._aliases,
     required AppUser currentUser,
     DateTime Function() now = DateTime.now,
   }) : _currentUser = currentUser,
@@ -50,6 +54,11 @@ class RecordPurchaseCubit extends Cubit<RecordPurchaseState> {
   final ReceiptPicker _receiptPicker;
   final ReceiptStore _receipts;
   final ReceiptReader _receiptReader;
+  final AliasRepository _aliases;
+
+  /// What receipt lines have been taught to mean. Empty until the watch
+  /// reports, or after it fails: a reading then just arrives unmatched.
+  Map<String, ReceiptAlias> _learned = const {};
 
   /// True while a photo is being read, so the screen can say so.
   bool _reading = false;
@@ -73,6 +82,7 @@ class RecordPurchaseCubit extends Cubit<RecordPurchaseState> {
   StreamSubscription<List<Item>>? _itemsSubscription;
   StreamSubscription<List<HouseholdMember>>? _membersSubscription;
   StreamSubscription<List<ShoppingEntry>>? _shoppingListSubscription;
+  StreamSubscription<Map<String, ReceiptAlias>>? _aliasesSubscription;
 
   void setDate(DateTime date) {
     _dateChosen = true;
@@ -187,12 +197,10 @@ class RecordPurchaseCubit extends Cubit<RecordPurchaseState> {
       draft = draft.copyWith(
         lines: [
           for (final line in reading.lines)
-            PurchaseDraftLine(
-              item: null,
-              quantity: line.quantity,
-              unit: line.unit,
-              lineTotal: line.lineTotal,
-              scannedText: line.rawText,
+            lineFromReading(
+              line,
+              aliases: _learned,
+              catalogue: _catalogue ?? const [],
             ),
         ],
       );
@@ -293,9 +301,11 @@ class RecordPurchaseCubit extends Cubit<RecordPurchaseState> {
     _itemsSubscription?.cancel();
     _membersSubscription?.cancel();
     _shoppingListSubscription?.cancel();
+    _aliasesSubscription?.cancel();
     _catalogue = null;
     _household = null;
     _entries = const [];
+    _learned = const {};
 
     _itemsSubscription = _items.watchItems().listen((items) {
       _catalogue = items;
@@ -309,6 +319,17 @@ class RecordPurchaseCubit extends Cubit<RecordPurchaseState> {
       (entries) => _entries = entries,
       onError: _onShoppingListError,
     );
+    _aliasesSubscription = _aliases.watchAliases().listen(
+      (aliases) => _learned = aliases,
+      onError: _onAliasesError,
+    );
+  }
+
+  /// Reported, but not shown: without aliases a reading only arrives
+  /// unmatched, and saving still teaches new ones.
+  void _onAliasesError(Object error, StackTrace stackTrace) {
+    _learned = const {};
+    addError(error, stackTrace);
   }
 
   /// Reported, but not shown: recording a spend must not depend on the list.
@@ -357,6 +378,7 @@ class RecordPurchaseCubit extends Cubit<RecordPurchaseState> {
     _itemsSubscription?.cancel();
     _membersSubscription?.cancel();
     _shoppingListSubscription?.cancel();
+    _aliasesSubscription?.cancel();
     return super.close();
   }
 }
