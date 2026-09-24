@@ -110,7 +110,10 @@ void main() {
     () async {
       final observer = _installObserver();
       final thrown = StateError('platform channel died');
-      repository.signInThrows = thrown;
+      final thrownTrace = StackTrace.fromString('#0 platformChannel');
+      repository
+        ..signInThrows = thrown
+        ..signInThrowsStackTrace = thrownTrace;
       final cubit = AuthCubit(repository);
       final expectation = expectLater(
         cubit.stream,
@@ -125,7 +128,7 @@ void main() {
       await expectation;
       expect(observer.errors, hasLength(1));
       expect(observer.errors.single.$1, same(thrown));
-      expect(observer.errors.single.$2.toString(), isNotEmpty);
+      expect(observer.errors.single.$2, same(thrownTrace));
       await cubit.close();
     },
   );
@@ -251,9 +254,20 @@ void main() {
   test('signing out delegates to the repository', () async {
     final cubit = AuthCubit(repository);
 
-    await cubit.signOut();
-
+    expect(await cubit.signOut(), isTrue);
     expect(repository.signOutCalls, 1);
+
+    await cubit.close();
+  });
+
+  test('a failed sign out is reported and returns false', () async {
+    final observer = _installObserver();
+    final thrown = StateError('channel died');
+    repository.signOutThrows = thrown;
+    final cubit = AuthCubit(repository);
+
+    expect(await cubit.signOut(), isFalse);
+    expect(observer.errors.single.$1, same(thrown));
 
     await cubit.close();
   });

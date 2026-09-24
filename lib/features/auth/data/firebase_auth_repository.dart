@@ -14,7 +14,7 @@ class FirebaseAuthRepository implements AuthRepository {
 
   @override
   Stream<AppUser?> authStateChanges() => _auth.authStateChanges().map(
-    (user) => user == null ? null : _toAppUser(user),
+    (user) => appUserFrom(uid: user?.uid, email: user?.email),
   );
 
   @override
@@ -28,10 +28,7 @@ class FirebaseAuthRepository implements AuthRepository {
         password: password,
       );
       final user = credential.user;
-      if (user == null) {
-        return const Err(UnexpectedAuthFailure());
-      }
-      return Ok(_toAppUser(user));
+      return signInResultFrom(appUserFrom(uid: user?.uid, email: user?.email));
     } on FirebaseAuthException catch (e) {
       return Err(authFailureFromCode(e.code));
     }
@@ -39,6 +36,4 @@ class FirebaseAuthRepository implements AuthRepository {
 
   @override
   Future<void> signOut() => _auth.signOut();
-
-  AppUser _toAppUser(User user) => AppUser(uid: user.uid, email: user.email);
 }

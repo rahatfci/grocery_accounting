@@ -7,43 +7,6 @@
 > finding is `open` or `fixed`, then archives resolved findings with the work
 > and resets this file.
 
-### F-05 [P3] open - `FirebaseAuthRepository` has no test, including its null-user branch
-
-**File:** lib/features/auth/data/firebase_auth_repository.dart:21-43
-**Found:** 2026-09-21 by /audit (scope: current; lens: tests)
-**Why it matters:** This is the only place a Firebase type is translated into the
-domain, and the only file in the delta with no coverage. Three behaviours go
-unasserted: `FirebaseAuthException.code` reaching `authFailureFromCode`, the
-`credential.user == null` branch returning `Err(UnexpectedAuthFailure())` (a
-guard that is written but never exercised, so a regression in it would go
-unnoticed), and `authStateChanges()` mapping a null `User` to a null `AppUser`.
-The 31 tests that do exist are strong and assertive rather than mirror-shaped, so
-this is the one real gap and not a pattern.
-
-The spec rules out `mockito` and `mocktail`, and `FirebaseAuth` is a concrete
-class with a wide surface, so a hand-written fake is genuinely expensive.
-
-**Suggested fix:** Either extract the translation into a pure helper in `logic/`
-that takes the already-extracted uid, email and error code and test that, or
-accept the gap explicitly and record the reason, since `authFailureFromCode`
-itself is thoroughly covered. If accepted, no current requirement is lost.
-**Resolution:**
-
-### F-06 [P3] open - `BlocProvider` takes ownership of a cubit it did not create
-
-**File:** lib/app.dart:16-17
-**Found:** 2026-09-21 by /audit (scope: current; lens: quality)
-**Why it matters:** `BlocProvider(create: (_) => authCubit)` hands an
-externally-owned instance to the `create` constructor, which makes the provider
-close it on dispose. `flutter_bloc` provides `BlocProvider.value` for exactly this
-case. It is harmless today because `GroceryAccountingApp` is the root and is never
-remounted, but it is the pattern the next feature will copy into a screen-level
-provider, where a remount closes a cubit someone else still holds.
-
-**Suggested fix:** `BlocProvider.value(value: authCubit, child: ...)`. One line,
-no behaviour change at the root. No current requirement is lost.
-**Resolution:**
-
 ### F-07 [P3] fixed - Web Firestore persistence takes the default single-tab manager
 
 **File:** lib/main.dart:15-17
@@ -71,24 +34,6 @@ installed `cloud_firestore_platform_interface-8.0.7/lib/src/settings.dart:210`
 rather than assumed. Verified only as far as startup: the web app boots with
 zero console errors or warnings, which proves the setting is accepted, not that
 two tabs now share the lease. Awaiting an `/audit` pass to close.
-
-### F-08 [P3] open - The sign-out future is dropped at the call site
-
-**File:** lib/features/home/presentation/home_page.dart:25
-**Found:** 2026-09-21 by /audit (scope: current; lens: quality)
-**Why it matters:** `onPressed: () => context.read<AuthCubit>().signOut()`
-discards the returned future, and `AuthCubit.signOut` forwards
-`_repository.signOut()` with no `try`/`catch` (auth_cubit.dart:37). A throwing
-`signOut` therefore becomes an unhandled async error, and the user stays on Home
-with no feedback and no indication the tap did nothing. `coding-standards.md`
-states errors in a future are handled or propagate deliberately; this does
-neither, and `flutter_lints` does not enable `unawaited_futures`, so
-`flutter analyze` stays clean over it.
-
-**Suggested fix:** Catch inside `AuthCubit.signOut` and surface a state, or at
-minimum report through `addError` so the failure is visible. No current
-requirement is lost.
-**Resolution:**
 
 ### F-12 [P3] open - The purchase screen's shopping list failure report is never asserted
 
@@ -160,24 +105,6 @@ A refused commit discards the photo without confirming it. Covered by store
 tests, including a flush racing a new keep, and by cubit tests on both
 platforms. Awaiting an `/audit` pass to close.
 
-### F-15 [P3] open - The sign-in error test does not prove the stack trace is forwarded
-
-**File:** test/features/auth/presentation/auth_cubit_test.dart:127-128
-**Found:** 2026-09-24 by /audit independent (scope: current; lens: tests)
-**Why it matters:** F-04 was about the error and its stack trace being thrown
-away, and the spec asks the extended `StateError` test to assert that both reach
-the observer. The test checks the error with `same(thrown)`, but the stack trace
-only with `toString()` being non-empty. `Cubit.addError`'s stack trace parameter
-is optional and defaults to `StackTrace.current`, so a regression to
-`addError(error)` (dropping the caught trace for the call-site one) still
-passes. The observer unit test does check `same(stackTrace)`, so only the cubit
-half is unguarded.
-**Suggested fix:** Assert the recorded trace points at the throw site, for
-example `contains('fake_auth_repository.dart')`, or have the fake throw with a
-known trace via `Error.throwWithStackTrace` and compare with `same`. Test only;
-no current requirement is lost.
-**Resolution:**
-
 ### F-16 [P3] open - `ItemsLoaded.now` doc still says it is taken only when the stream reports
 
 **File:** lib/features/items/presentation/items_state.dart:29-30
@@ -191,4 +118,33 @@ data, which is exactly the assumption F-11 was about.
 **Suggested fix:** Reword to say `now` is taken when the stream reports and
 again when the catalogue is refreshed on resume, still one instant for every
 row. Comment only; no current requirement is lost.
+**Resolution:**
+
+### F-17 [P3] open - The failed sign-out cubit test does not prove the stack trace is forwarded
+
+**File:** test/features/auth/presentation/auth_cubit_test.dart:263-273
+**Found:** 2026-09-24 by /audit independent (scope: current; lens: tests)
+**Why it matters:** The new `signOut` catch calls `addError(error, stackTrace)`
+(lib/features/auth/presentation/auth_cubit.dart:52-54), but its test checks only
+the error with `same(thrown)`. Because `addError`'s stack trace is optional and
+defaults to `StackTrace.current`, a regression to `addError(error)` still
+passes. This is the same gap F-15 closed for sign in, repeated in the new code.
+**Suggested fix:** Give the fake a `signOutThrowsStackTrace` thrown via
+`Error.throwWithStackTrace`, as `signIn` now does, and assert
+`observer.errors.single.$2` is `same` as it. Test only; no current requirement
+is lost.
+**Resolution:**
+
+### F-18 [P3] open - A successful sign out is never checked to show no failure snackbar
+
+**File:** test/features/home/presentation/home_page_test.dart:182-188
+**Found:** 2026-09-24 by /audit independent (scope: current; lens: tests)
+**Why it matters:** `a failed sign out says so` proves the snackbar appears on
+failure, and `signing out is still reachable` only counts `signOutCalls`. If
+`_signOut` (lib/features/home/presentation/home_page.dart:296-304) showed the
+snackbar unconditionally (for example, the `if (!signedOut)` guard dropped),
+both tests stay green while every successful sign out flashes "Could not sign out. Try again." before Home is replaced.
+**Suggested fix:** In `signing out is still reachable`, also
+`expect(find.text('Could not sign out. Try again.'), findsNothing)`. Test only;
+no current requirement is lost.
 **Resolution:**

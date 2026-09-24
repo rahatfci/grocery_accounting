@@ -12,6 +12,12 @@ class FakeAuthRepository implements AuthRepository {
 
   Result<AppUser, AuthFailure> signInResult = const Ok(testUser);
   Object? signInThrows;
+
+  /// The trace [signInThrows] is thrown with, so a test can check it is the
+  /// one reported rather than a trace taken somewhere else.
+  StackTrace? signInThrowsStackTrace;
+
+  Object? signOutThrows;
   int signOutCalls = 0;
 
   /// When set, `signIn` waits on this instead of returning at once, so a test
@@ -38,6 +44,10 @@ class FakeAuthRepository implements AuthRepository {
     }
     final thrown = signInThrows;
     if (thrown != null) {
+      final stackTrace = signInThrowsStackTrace;
+      if (stackTrace != null) {
+        Error.throwWithStackTrace(thrown, stackTrace);
+      }
       throw thrown;
     }
     return signInResult;
@@ -46,5 +56,9 @@ class FakeAuthRepository implements AuthRepository {
   @override
   Future<void> signOut() async {
     signOutCalls++;
+    final thrown = signOutThrows;
+    if (thrown != null) {
+      throw thrown;
+    }
   }
 }

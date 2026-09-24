@@ -85,8 +85,8 @@ class GroceryAccountingApp extends StatelessWidget {
         RepositoryProvider.value(value: aliasRepository),
         RepositoryProvider.value(value: csvSharer),
       ],
-      child: BlocProvider(
-        create: (_) => authCubit,
+      child: BlocProvider.value(
+        value: authCubit,
         child: MaterialApp(
           debugShowCheckedModeBanner: false,
           title: 'Grocery Accounting di Quattro Nero',

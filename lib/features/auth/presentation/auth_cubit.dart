@@ -43,7 +43,17 @@ class AuthCubit extends Cubit<AuthState> {
     }
   }
 
-  Future<void> signOut() => _repository.signOut();
+  /// Signs out, returning false when it failed so the caller can say so. A
+  /// successful sign out is reported by the auth stream, like a sign in.
+  Future<bool> signOut() async {
+    try {
+      await _repository.signOut();
+      return true;
+    } catch (error, stackTrace) {
+      addError(error, stackTrace);
+      return false;
+    }
+  }
 
   /// Drops a failure message once the user starts correcting the form.
   void failureAcknowledged() {

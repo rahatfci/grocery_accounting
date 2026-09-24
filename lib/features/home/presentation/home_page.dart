@@ -94,7 +94,7 @@ class HomeView extends StatelessWidget {
           IconButton(
             icon: const Icon(Icons.logout),
             tooltip: 'Sign out',
-            onPressed: () => context.read<AuthCubit>().signOut(),
+            onPressed: () => _signOut(context),
           ),
         ],
       ),
@@ -291,4 +291,14 @@ class _RefreshOnResumeState extends State<_RefreshOnResume> {
 
   @override
   Widget build(BuildContext context) => widget.child;
+}
+
+Future<void> _signOut(BuildContext context) async {
+  final messenger = ScaffoldMessenger.of(context);
+  final signedOut = await context.read<AuthCubit>().signOut();
+  if (!signedOut) {
+    messenger.showSnackBar(
+      const SnackBar(content: Text('Could not sign out. Try again.')),
+    );
+  }
 }

@@ -188,6 +188,16 @@ void main() {
     expect(authRepository.signOutCalls, 1);
   });
 
+  testWidgets('a failed sign out says so', (tester) async {
+    authRepository.signOutThrows = StateError('channel died');
+    await _pumpHome(tester, authRepository, itemRepository);
+
+    await tester.tap(find.byTooltip('Sign out'));
+    await tester.pump();
+
+    expect(find.text('Could not sign out. Try again.'), findsOneWidget);
+  });
+
   testWidgets('leads with recording a purchase', (tester) async {
     await _pumpHome(tester, authRepository, itemRepository);
 
