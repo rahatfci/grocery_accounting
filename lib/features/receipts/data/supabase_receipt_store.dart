@@ -129,22 +129,54 @@ class SupabaseReceiptStore implements ReceiptStore {
 
   bool _flushing = false;
 
+  /// Web keeps a photo in memory until its purchase is accepted: there is
+  /// nowhere durable to put it, and uploading first would orphan it on a
+  /// refusal.
+  final _held = <String, Uint8List>{};
+
+  @override
+  bool get queuesOffline => !_isWeb;
+
   @override
   Future<Result<void, DataFailure>> keep(
     String purchaseId,
     ReceiptPhoto photo,
   ) async {
     if (_isWeb) {
-      return _uploadNow(purchaseId, photo.bytes);
+      _held[purchaseId] = photo.bytes;
+      return const Ok(null);
     }
     try {
       final directory = await _queueDirectory();
       await directory.create(recursive: true);
-      // Written aside and renamed, so a flush never uploads half a file.
-      final name = pendingReceiptName(purchaseId);
-      final partial = File('${directory.path}/.$name.partial');
+      // Written aside and renamed, so nothing ever sees half a file. The name
+      // it lands on is still one `flush` ignores, until `confirm`.
+      final partial = File(
+        '${directory.path}/.${pendingReceiptName(purchaseId)}.partial',
+      );
       await partial.writeAsBytes(photo.bytes, flush: true);
-      await partial.rename('${directory.path}/$name');
+      await partial.rename(_unconfirmed(directory, purchaseId).path);
+      return const Ok(null);
+    } on FileSystemException {
+      return const Err(UnexpectedDataFailure());
+    }
+  }
+
+  @override
+  Future<Result<void, DataFailure>> confirm(String purchaseId) async {
+    if (_isWeb) {
+      final bytes = _held.remove(purchaseId);
+      if (bytes == null) {
+        return const Err(UnexpectedDataFailure());
+      }
+      return _uploadNow(purchaseId, bytes);
+    }
+    try {
+      final directory = await _queueDirectory();
+      await _unconfirmed(
+        directory,
+        purchaseId,
+      ).rename('${directory.path}/${pendingReceiptName(purchaseId)}');
       return const Ok(null);
     } on FileSystemException {
       return const Err(UnexpectedDataFailure());
@@ -154,16 +186,19 @@ class SupabaseReceiptStore implements ReceiptStore {
   @override
   Future<void> discard(String purchaseId) async {
     if (_isWeb) {
+      _held.remove(purchaseId);
       return;
     }
     final directory = await _queueDirectory();
-    final file = File('${directory.path}/${pendingReceiptName(purchaseId)}');
     try {
-      await file.delete();
+      await _unconfirmed(directory, purchaseId).delete();
     } on FileSystemException {
       // Already gone, which is the outcome wanted.
     }
   }
+
+  File _unconfirmed(Directory directory, String purchaseId) =>
+      File('${directory.path}/${pendingReceiptName(purchaseId)}.new');
 
   @override
   Future<int> flush() async {

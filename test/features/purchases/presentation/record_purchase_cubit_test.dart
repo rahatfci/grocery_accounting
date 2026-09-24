@@ -939,4 +939,85 @@ void main() {
       expect(aliases.hasListener, isFalse);
     });
   });
+
+  group('nothing uploads before the purchase is accepted', () {
+    Future<RecordPurchaseCubit> withPhoto() async {
+      final cubit = await ready();
+      cubit.setShopName('Conad');
+      cubit.setTotalText('10');
+      cubit.attachReceipt(testPhoto());
+      return cubit;
+    }
+
+    test('phone: the path goes with the purchase, then the photo is '
+        'confirmed and flushed', () async {
+      final cubit = await withPhoto();
+
+      expect(await cubit.commit(), const CommitSucceeded());
+      expect(purchases.receiptPaths.single, 'receipts/new1');
+      expect(receipts.confirmed, ['new1']);
+      await pumpEventQueue();
+      expect(receipts.flushes, 1);
+      expect(purchases.linkedReceipts, isEmpty);
+    });
+
+    test('phone: a refused purchase discards its photo unconfirmed', () async {
+      final cubit = await withPhoto();
+      purchases.commitResult = const Err(PermissionDenied());
+
+      await cubit.commit();
+
+      expect(receipts.confirmed, isEmpty);
+      expect(receipts.discarded, ['new1']);
+    });
+
+    test('web: saved without a path, uploaded, then linked', () async {
+      receipts.queuesOffline = false;
+      final cubit = await withPhoto();
+
+      expect(await cubit.commit(), const CommitSucceeded());
+      expect(purchases.receiptPaths.single, isNull);
+      expect(receipts.confirmed, ['new1']);
+      expect(purchases.linkedReceipts.single, (
+        purchaseId: 'new1',
+        path: 'receipts/new1',
+      ));
+      await pumpEventQueue();
+      expect(receipts.flushes, 0);
+    });
+
+    test('web: a refused purchase uploads nothing', () async {
+      receipts.queuesOffline = false;
+      final cubit = await withPhoto();
+      purchases.commitResult = const Err(PermissionDenied());
+
+      expect(await cubit.commit(), const CommitFailed(PermissionDenied()));
+      expect(receipts.confirmed, isEmpty);
+      expect(receipts.discarded, ['new1']);
+      expect(purchases.linkedReceipts, isEmpty);
+    });
+
+    test('web: a failed upload saves without the photo and says so', () async {
+      receipts.queuesOffline = false;
+      receipts.confirmResult = const Err(ConnectionUnavailable());
+      final cubit = await withPhoto();
+
+      expect(
+        await cubit.commit(),
+        const CommitSucceeded(receiptSkipped: ConnectionUnavailable()),
+      );
+      expect(purchases.linkedReceipts, isEmpty);
+    });
+
+    test('web: a refused link says the photo was not attached', () async {
+      receipts.queuesOffline = false;
+      purchases.linkResult = const Err(PermissionDenied());
+      final cubit = await withPhoto();
+
+      expect(
+        await cubit.commit(),
+        const CommitSucceeded(receiptSkipped: PermissionDenied()),
+      );
+    });
+  });
 }

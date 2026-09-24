@@ -33,7 +33,14 @@ class FakeReceiptPicker implements ReceiptPicker {
 class FakeReceiptStore implements ReceiptStore {
   final kept = <({String purchaseId, ReceiptPhoto photo})>[];
   final discarded = <String>[];
+  final confirmed = <String>[];
   int flushes = 0;
+
+  /// Phones by default; a test sets false to follow the web flow.
+  @override
+  bool queuesOffline = true;
+
+  Result<void, DataFailure> confirmResult = const Ok(null);
 
   Result<void, DataFailure> keepResult = const Ok(null);
   Object? flushThrows;
@@ -49,6 +56,12 @@ class FakeReceiptStore implements ReceiptStore {
     kept.add((purchaseId: purchaseId, photo: photo));
     await keepGate?.future;
     return keepResult;
+  }
+
+  @override
+  Future<Result<void, DataFailure>> confirm(String purchaseId) async {
+    confirmed.add(purchaseId);
+    return confirmResult;
   }
 
   @override

@@ -7,19 +7,26 @@ import '../logic/receipt.dart';
 ///
 /// Implementations own every Firebase and file system type.
 abstract interface class ReceiptStore {
-  /// Makes sure [photo] will reach `receiptStoragePath(purchaseId)`.
-  ///
-  /// On a phone this writes it to the device queue, which survives restarts,
-  /// and the upload happens on a later [flush]. On web there is nowhere
-  /// durable to keep it, so this uploads it and only succeeds once it is
-  /// stored.
+  /// Whether photos wait on the device and upload later. True on phones,
+  /// where the purchase can record the photo's path at once. False on web,
+  /// where the path is recorded only after [confirm] has uploaded it.
+  bool get queuesOffline;
+
+  /// Holds [photo] for `receiptStoragePath(purchaseId)` without uploading
+  /// anything yet, so a purchase that is then refused leaves nothing in the
+  /// bucket. On a phone it is written to the device, which survives restarts.
   Future<Result<void, DataFailure>> keep(String purchaseId, ReceiptPhoto photo);
 
-  /// Drops a kept photo whose purchase was refused. Does nothing on web.
+  /// The purchase was accepted, so its photo may go. On a phone this hands it
+  /// to the upload queue; on web it uploads it, and the result says whether
+  /// it is stored.
+  Future<Result<void, DataFailure>> confirm(String purchaseId);
+
+  /// Drops a kept photo whose purchase was refused.
   Future<void> discard(String purchaseId);
 
-  /// Uploads everything still queued on this device, and returns how many
-  /// are left. A photo that fails stays queued for the next flush. Does
-  /// nothing on web.
+  /// Uploads every confirmed photo still queued on this device, and returns
+  /// how many are left. A photo that fails stays queued for the next flush.
+  /// Does nothing on web.
   Future<int> flush();
 }

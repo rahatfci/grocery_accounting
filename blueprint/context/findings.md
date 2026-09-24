@@ -255,7 +255,7 @@ already at this path is the same photo and counts as stored". Comments only; no
 current requirement is lost.
 **Resolution:**
 
-### F-14 [P3] open - A refused purchase can still leave an uploaded receipt object
+### F-14 [P3] fixed - A refused purchase can still leave an uploaded receipt object
 
 **File:** lib/features/receipts/data/supabase_receipt_store.dart:137-139
 **Found:** 2026-09-24 by /audit independent (scope: current; lens: quality, security)
@@ -277,4 +277,12 @@ the spec, or upload after the commit on web too. For phones, have `keep` leave
 the file under a name `flush` ignores (for example the existing `.partial`
 form) and rename it to `{id}.img` only once the commit succeeds or passes the
 refusal window. No current requirement is lost.
-**Resolution:**
+**Resolution:** fixed on 2026-09-24 by fix `refused-purchases-leave-uploaded-receipt-photos`.
+The user chose to upload after saving on web. `ReceiptStore.keep` now uploads
+nothing on either platform. On phones it writes `{id}.img.new`, which `flush`
+ignores, and `confirm` renames it into the queue only after the commit
+succeeds or passes the refusal window. On web it holds the bytes, `confirm`
+uploads them after the commit, and `setReceiptImagePath` then links the path.
+A refused commit discards the photo without confirming it. Covered by store
+tests, including a flush racing a new keep, and by cubit tests on both
+platforms. Awaiting an `/audit` pass to close.

@@ -122,6 +122,18 @@ class FakePurchaseRepository implements PurchaseRepository {
   @override
   String newPurchaseId() => 'new${++_nextId}';
 
+  final linkedReceipts = <({String purchaseId, String path})>[];
+  Result<void, DataFailure> linkResult = const Ok(null);
+
+  @override
+  Future<Result<void, DataFailure>> setReceiptImagePath(
+    String purchaseId,
+    String receiptImagePath,
+  ) async {
+    linkedReceipts.add((purchaseId: purchaseId, path: receiptImagePath));
+    return linkResult;
+  }
+
   @override
   Future<Result<bool, DataFailure>> isItemReferenced(String itemId) async {
     referenceChecks.add(itemId);

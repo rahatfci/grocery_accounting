@@ -234,20 +234,26 @@ class RecordPurchaseCubit extends Cubit<RecordPurchaseState> {
 
     final draft = _draft;
     final purchaseId = _purchases.newPurchaseId();
-    String? receiptPath;
+    var kept = false;
     DataFailure? receiptSkipped;
 
     try {
       if (draft.receipt case final photo?) {
         switch (await _receipts.keep(purchaseId, photo)) {
           case Ok():
-            receiptPath = receiptStoragePath(purchaseId);
+            kept = true;
           case Err(:final error):
             // The spend matters more than the photo, so the purchase is
             // saved without it and the member is told.
             receiptSkipped = error;
         }
       }
+
+      // A phone's queue guarantees the upload, so the path is recorded with
+      // the purchase. Web only records it once the photo is stored.
+      final pathAtCommit = kept && _receipts.queuesOffline
+          ? receiptStoragePath(purchaseId)
+          : null;
 
       final result = await _purchases
           .commit(
@@ -257,18 +263,18 @@ class RecordPurchaseCubit extends Cubit<RecordPurchaseState> {
               for (final line in draft.lines) ?line.item,
             ]),
             purchaseId: purchaseId,
-            receiptImagePath: receiptPath,
+            receiptImagePath: pathAtCommit,
           )
           .timeout(refusalWindow, onTimeout: () => const Ok(null));
 
       switch (result) {
         case Ok():
-          if (receiptPath != null) {
-            unawaited(_flushReceipts());
+          if (kept) {
+            receiptSkipped = await _storeReceipt(purchaseId);
           }
           return CommitSucceeded(receiptSkipped: receiptSkipped);
         case Err(:final error):
-          if (receiptPath != null) {
+          if (kept) {
             await _receipts.discard(purchaseId);
           }
           return CommitFailed(error);
@@ -278,11 +284,35 @@ class RecordPurchaseCubit extends Cubit<RecordPurchaseState> {
       // else still has to reach the member as a message rather than an
       // unhandled error.
       addError(error, stackTrace);
-      if (receiptPath != null) {
+      if (kept) {
         await _receipts.discard(purchaseId);
       }
       return const CommitFailed(UnexpectedDataFailure());
     }
+  }
+
+  /// Lets the kept photo of an accepted purchase go, and returns why it could
+  /// not be stored, if it could not.
+  ///
+  /// Nothing uploads before this point, so a refused purchase never leaves a
+  /// photo in the bucket.
+  Future<DataFailure?> _storeReceipt(String purchaseId) async {
+    final confirmed = await _receipts.confirm(purchaseId);
+    if (confirmed case Err(:final error)) {
+      return error;
+    }
+    if (_receipts.queuesOffline) {
+      unawaited(_flushReceipts());
+      return null;
+    }
+    // Web: the photo is stored now, so the purchase may point at it.
+    final linked = await _purchases
+        .setReceiptImagePath(purchaseId, receiptStoragePath(purchaseId))
+        .timeout(refusalWindow, onTimeout: () => const Ok(null));
+    return switch (linked) {
+      Ok() => null,
+      Err(:final error) => error,
+    };
   }
 
   /// Starts the upload the purchase screen does not wait for. A failure

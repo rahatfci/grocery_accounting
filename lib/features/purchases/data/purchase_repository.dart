@@ -35,6 +35,16 @@ abstract interface class PurchaseRepository {
     String? receiptImagePath,
   });
 
+  /// Records where the purchase's receipt photo is stored, once it is.
+  ///
+  /// Web uploads the photo only after the purchase is accepted, so the path
+  /// arrives in this second write rather than with the purchase. Only
+  /// `receiptImagePath` is touched.
+  Future<Result<void, DataFailure>> setReceiptImagePath(
+    String purchaseId,
+    String receiptImagePath,
+  );
+
   /// A fresh purchase document id, generated on the device so it works
   /// offline.
   String newPurchaseId();

@@ -142,6 +142,21 @@ class FirestorePurchaseRepository implements PurchaseRepository {
   String newPurchaseId() => _purchases.doc().id;
 
   @override
+  Future<Result<void, DataFailure>> setReceiptImagePath(
+    String purchaseId,
+    String receiptImagePath,
+  ) async {
+    try {
+      await _purchases.doc(purchaseId).update({
+        'receiptImagePath': receiptImagePath,
+      });
+      return const Ok(null);
+    } on FirebaseException catch (e) {
+      return Err(dataFailureFromCode(e.code));
+    }
+  }
+
+  @override
   Future<Result<bool, DataFailure>> isItemReferenced(String itemId) async {
     try {
       final referencing = await _purchases
