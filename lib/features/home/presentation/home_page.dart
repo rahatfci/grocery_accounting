@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
+import '../../../core/layout.dart';
+
 import '../../auth/logic/app_user.dart';
 import '../../auth/presentation/auth_cubit.dart';
 import '../../items/data/item_repository.dart';
@@ -70,8 +72,6 @@ class HomeView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-
     return Scaffold(
       appBar: AppBar(
         title: const Text('Grocery Accounting'),
@@ -100,49 +100,122 @@ class HomeView extends StatelessWidget {
       ),
       body: SafeArea(
         child: _RefreshOnResume(
-          child: Center(
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 420),
+          child: LayoutBuilder(
+            builder: (context, constraints) =>
+                constraints.maxWidth >= wideLayoutWidth
+                ? _WideHome(user: user)
+                : _NarrowHome(user: user),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// A phone: one thumb-reachable column, the action first.
+class _NarrowHome extends StatelessWidget {
+  const _NarrowHome({required this.user});
+
+  final AppUser user;
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 420),
+        child: CustomScrollView(
+          slivers: [
+            _HomeActions(user: user),
+            const SliverPadding(
+              padding: EdgeInsets.fromLTRB(8, 0, 8, 24),
+              sliver: RunningLowSection(),
+            ),
+            const SliverPadding(
+              padding: EdgeInsets.fromLTRB(8, 0, 8, 24),
+              sliver: ShoppingListSection(),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// A tablet or web window: the shopping list beside what is running low, so
+/// both can be read without scrolling one past the other.
+class _WideHome extends StatelessWidget {
+  const _WideHome({required this.user});
+
+  final AppUser user;
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 1100),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(
               child: CustomScrollView(
                 slivers: [
-                  SliverPadding(
-                    padding: const EdgeInsets.fromLTRB(24, 24, 24, 16),
-                    sliver: SliverList.list(
-                      children: [
-                        Text(
-                          user.email ?? 'Signed in',
-                          style: theme.textTheme.titleMedium,
-                          textAlign: TextAlign.center,
-                        ),
-                        const SizedBox(height: 24),
-                        // The one action Home is built around.
-                        _CaptureButton(user: user),
-                        const SizedBox(height: 12),
-                        OutlinedButton.icon(
-                          onPressed: () => Navigator.of(context).push(
-                            MaterialPageRoute<void>(
-                              builder: (_) => RecordPurchasePage(user: user),
-                            ),
-                          ),
-                          icon: const Icon(Icons.receipt_long_outlined),
-                          label: const Text('Record a purchase'),
-                        ),
-                      ],
-                    ),
-                  ),
+                  _HomeActions(user: user),
                   const SliverPadding(
                     padding: EdgeInsets.fromLTRB(8, 0, 8, 24),
                     sliver: RunningLowSection(),
                   ),
-                  const SliverPadding(
-                    padding: EdgeInsets.fromLTRB(8, 0, 8, 24),
+                ],
+              ),
+            ),
+            const SizedBox(width: 24),
+            const Expanded(
+              child: CustomScrollView(
+                slivers: [
+                  SliverPadding(
+                    padding: EdgeInsets.fromLTRB(8, 24, 8, 24),
                     sliver: ShoppingListSection(),
                   ),
                 ],
               ),
             ),
-          ),
+          ],
         ),
+      ),
+    );
+  }
+}
+
+/// Who is signed in, and the two ways to record a purchase.
+class _HomeActions extends StatelessWidget {
+  const _HomeActions({required this.user});
+
+  final AppUser user;
+
+  @override
+  Widget build(BuildContext context) {
+    return SliverPadding(
+      padding: const EdgeInsets.fromLTRB(24, 24, 24, 16),
+      sliver: SliverList.list(
+        children: [
+          Text(
+            user.email ?? 'Signed in',
+            style: Theme.of(context).textTheme.titleMedium,
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 24),
+          // The one action Home is built around.
+          _CaptureButton(user: user),
+          const SizedBox(height: 12),
+          OutlinedButton.icon(
+            onPressed: () => Navigator.of(context).push(
+              MaterialPageRoute<void>(
+                builder: (_) => RecordPurchasePage(user: user),
+              ),
+            ),
+            icon: const Icon(Icons.receipt_long_outlined),
+            label: const Text('Record a purchase'),
+          ),
+        ],
       ),
     );
   }

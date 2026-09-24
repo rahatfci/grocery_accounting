@@ -14,6 +14,11 @@ final class LowStockItem extends Equatable {
   List<Object?> get props => [item, stock];
 }
 
+/// The running low rule for one stock level: strictly below the threshold,
+/// and never for a stock or threshold that is not a number.
+bool isBelowThreshold(double stock, double threshold) =>
+    stock.isFinite && threshold.isFinite && stock < threshold;
+
 /// Every item whose derived stock is strictly below its low threshold.
 ///
 /// Calculated, never stored: a restock lifts the stock and the item drops out
@@ -25,9 +30,7 @@ List<LowStockItem> runningLow(List<Item> items, {required DateTime now}) {
   final low = [
     for (final (index, item) in items.indexed)
       if (currentStock(item, now: now) case final stock
-          when stock.isFinite &&
-              item.lowThreshold.isFinite &&
-              stock < item.lowThreshold)
+          when isBelowThreshold(stock, item.lowThreshold))
         (index: index, entry: LowStockItem(item: item, stock: stock)),
   ];
 

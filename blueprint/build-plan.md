@@ -35,4 +35,4 @@ order it runs in. The review screen is the feature; the scanner prefills it.
 ## Milestone 6 - Finish
 
 - [x] 12. **CSV export** - export a month of purchases and share it.
-- [ ] 13. **Large screen and web layout pass** - responsive reports and tables, and the manual entry path for receipts on web where ML Kit is unavailable.
+- [x] 13. **Large screen and web layout pass** - responsive reports and tables, and the manual entry path for receipts on web where ML Kit is unavailable.

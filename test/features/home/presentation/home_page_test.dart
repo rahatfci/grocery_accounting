@@ -357,6 +357,10 @@ void main() {
   });
 
   testWidgets('shows the shopping list below running low', (tester) async {
+    tester.view.physicalSize = const Size(400, 900);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
     final shoppingListRepository = FakeShoppingListRepository();
     await _pumpHome(
       tester,
@@ -508,5 +512,38 @@ void main() {
     await tester.pump();
 
     expect(store.flushes, 2);
+  });
+
+  testWidgets('a wide screen puts the shopping list beside running low', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1000, 800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    await _pumpHome(tester, authRepository, itemRepository);
+
+    final runningLow = tester.getTopLeft(find.text('Running low'));
+    final shoppingList = tester.getTopLeft(find.text('Shopping list'));
+    expect(shoppingList.dx, greaterThan(runningLow.dx + 300));
+    expect(shoppingList.dy, lessThan(runningLow.dy));
+    expect(
+      find.widgetWithText(FilledButton, 'Capture receipt'),
+      findsOneWidget,
+    );
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('a phone keeps one column', (tester) async {
+    tester.view.physicalSize = const Size(400, 900);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    await _pumpHome(tester, authRepository, itemRepository);
+
+    final runningLow = tester.getTopLeft(find.text('Running low'));
+    final shoppingList = tester.getTopLeft(find.text('Shopping list'));
+    expect((shoppingList.dx - runningLow.dx).abs(), lessThan(1));
+    expect(shoppingList.dy, greaterThan(runningLow.dy));
   });
 }

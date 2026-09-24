@@ -1,11 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
+import '../../../core/layout.dart';
 import '../../auth/logic/app_user.dart';
 import '../../purchases/data/purchase_repository.dart';
 import '../data/item_repository.dart';
 import '../logic/item.dart';
 import '../logic/item_category.dart';
+import '../logic/running_low.dart';
 import '../logic/stock.dart';
 import 'item_detail_page.dart';
 import 'item_form_page.dart';
@@ -166,6 +168,27 @@ class _ItemList extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) => constraints.maxWidth >= wideLayoutWidth
+          ? _ItemTable(items: items, now: now, user: user)
+          : _NarrowItemList(items: items, now: now, user: user),
+    );
+  }
+}
+
+class _NarrowItemList extends StatelessWidget {
+  const _NarrowItemList({
+    required this.items,
+    required this.now,
+    required this.user,
+  });
+
+  final List<Item> items;
+  final DateTime now;
+  final AppUser user;
+
+  @override
+  Widget build(BuildContext context) {
     return Center(
       child: ConstrainedBox(
         // Phone stays one column; a wide window centres the list instead of
@@ -203,6 +226,156 @@ class _ItemRow extends StatelessWidget {
       ),
       subtitle: Text(categoryLabel(item.category)),
       trailing: Text(formatStock(currentStock(item, now: now), item.unit)),
+    );
+  }
+}
+
+/// The catalogue as a table, for a screen wide enough to compare items at a
+/// glance. Same order and same tap as the list.
+class _ItemTable extends StatelessWidget {
+  const _ItemTable({
+    required this.items,
+    required this.now,
+    required this.user,
+  });
+
+  final List<Item> items;
+  final DateTime now;
+  final AppUser user;
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 1100),
+        child: Column(
+          children: [
+            const _TableHeader(),
+            const Divider(height: 1),
+            Expanded(
+              child: ListView.separated(
+                // Clears the floating action button at the end of a full list.
+                padding: const EdgeInsets.only(bottom: 88),
+                itemCount: items.length,
+                separatorBuilder: (_, _) => const Divider(height: 1),
+                itemBuilder: (context, index) => _TableRow(
+                  key: ValueKey(items[index].id),
+                  item: items[index],
+                  now: now,
+                  user: user,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _TableHeader extends StatelessWidget {
+  const _TableHeader();
+
+  @override
+  Widget build(BuildContext context) {
+    final style = Theme.of(context).textTheme.labelLarge;
+    return Semantics(
+      header: true,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        child: _TableColumns(
+          name: Text('Name', style: style),
+          category: Text('Category', style: style),
+          stock: Text('Stock', style: style, textAlign: TextAlign.end),
+          dailyUse: Text('Daily use', style: style, textAlign: TextAlign.end),
+          lowBelow: Text('Low below', style: style, textAlign: TextAlign.end),
+        ),
+      ),
+    );
+  }
+}
+
+class _TableRow extends StatelessWidget {
+  const _TableRow({
+    required this.item,
+    required this.now,
+    required this.user,
+    super.key,
+  });
+
+  final Item item;
+  final DateTime now;
+  final AppUser user;
+
+  @override
+  Widget build(BuildContext context) {
+    final stock = currentStock(item, now: now);
+    final low = isBelowThreshold(stock, item.lowThreshold);
+    final error = Theme.of(context).colorScheme.error;
+
+    return InkWell(
+      onTap: () => _openDetail(context, item, user),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        child: _TableColumns(
+          name: Text(item.name, maxLines: 1, overflow: TextOverflow.ellipsis),
+          category: Text(
+            categoryLabel(item.category),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+          stock: Text(
+            formatStock(stock, item.unit),
+            textAlign: TextAlign.end,
+            style: low ? TextStyle(color: error) : null,
+          ),
+          dailyUse: Text(
+            item.dailyUsage > 0
+                ? '${formatStock(item.dailyUsage, item.unit)}/day'
+                : '-',
+            textAlign: TextAlign.end,
+          ),
+          lowBelow: Text(
+            formatStock(item.lowThreshold, item.unit),
+            textAlign: TextAlign.end,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// One set of column widths, shared by the header and every row so they line
+/// up.
+class _TableColumns extends StatelessWidget {
+  const _TableColumns({
+    required this.name,
+    required this.category,
+    required this.stock,
+    required this.dailyUse,
+    required this.lowBelow,
+  });
+
+  final Widget name;
+  final Widget category;
+  final Widget stock;
+  final Widget dailyUse;
+  final Widget lowBelow;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Expanded(flex: 3, child: name),
+        const SizedBox(width: 16),
+        Expanded(flex: 2, child: category),
+        const SizedBox(width: 16),
+        Expanded(child: stock),
+        const SizedBox(width: 16),
+        Expanded(child: dailyUse),
+        const SizedBox(width: 16),
+        Expanded(child: lowBelow),
+      ],
     );
   }
 }

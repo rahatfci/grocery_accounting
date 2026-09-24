@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
+import '../../../core/layout.dart';
 import '../../../core/widgets/failure_message.dart';
 import '../../items/data/item_repository.dart';
 import '../../members/data/member_repository.dart';
@@ -160,10 +161,6 @@ class _MonthBar extends StatelessWidget {
   }
 }
 
-/// Above this the report reads in two columns. Web and tablet are where
-/// spending is reviewed sitting down, so the width is used when there is any.
-const double _twoColumnWidth = 720;
-
 @visibleForTesting
 const Key oneColumnKey = Key('reports-one-column');
 
@@ -191,7 +188,7 @@ class _ReportBody extends StatelessWidget {
                 _MonthTotal(total: report.monthTotal),
                 if (report.isEmpty)
                   const _NothingThisMonth()
-                else if (constraints.maxWidth >= _twoColumnWidth)
+                else if (constraints.maxWidth >= wideLayoutWidth)
                   _TwoColumns(report: report)
                 else
                   _OneColumn(report: report),

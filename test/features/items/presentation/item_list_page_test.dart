@@ -164,7 +164,7 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('the list stays readable on a wide window', (tester) async {
+  testWidgets('a very wide window keeps the table readable', (tester) async {
     tester.view.physicalSize = const Size(2400, 1400);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
@@ -174,7 +174,106 @@ void main() {
     repository.emitItems([testItem(name: 'Rice')]);
     await tester.pump();
 
-    expect(tester.getSize(find.byType(ListView)).width, lessThanOrEqualTo(560));
+    expect(find.text('Daily use'), findsOneWidget);
+    expect(
+      tester.getSize(find.byType(ListView)).width,
+      lessThanOrEqualTo(1100),
+    );
+  });
+
+  group('by width', () {
+    void setWidth(WidgetTester tester, double width) {
+      tester.view.physicalSize = Size(width, 900);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+    }
+
+    // Stocked 3 kg at the baseline, a quarter kilo a day, two days on: 2.5 kg,
+    // above its 2 kg threshold. Beans are a non-staple under their threshold.
+    final rice = testItem(
+      id: 'rice',
+      name: 'Rice',
+    ).copyWith(stockAtBaseline: 3);
+    final beans = testItem(
+      id: 'beans',
+      name: 'Borlotti beans in a long, descriptive supermarket name',
+      category: 'pantry',
+      dailyUsage: 0,
+      lowThreshold: 4,
+    ).copyWith(stockAtBaseline: 1);
+
+    testWidgets('a phone keeps the list', (tester) async {
+      setWidth(tester, 400);
+      await _pumpCatalogue(tester, repository, purchases);
+      repository.emitItems([rice]);
+      await tester.pump();
+
+      expect(find.byType(ListTile), findsOneWidget);
+      expect(find.text('Daily use'), findsNothing);
+    });
+
+    testWidgets('a wide screen shows every column as a table', (tester) async {
+      setWidth(tester, 1000);
+      await _pumpCatalogue(tester, repository, purchases);
+      repository.emitItems([rice, beans]);
+      await tester.pump();
+
+      expect(find.byType(ListTile), findsNothing);
+      for (final header in [
+        'Name',
+        'Category',
+        'Stock',
+        'Daily use',
+        'Low below',
+      ]) {
+        expect(find.text(header), findsOneWidget);
+      }
+      expect(find.text('Rice'), findsOneWidget);
+      expect(find.text('2.5 kg'), findsOneWidget);
+      expect(find.text('0.25 kg/day'), findsOneWidget);
+      expect(find.text('2 kg'), findsOneWidget);
+      // A non-staple has no daily use.
+      expect(find.text('-'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('a stock under its threshold is marked', (tester) async {
+      setWidth(tester, 1000);
+      await _pumpCatalogue(tester, repository, purchases);
+      repository.emitItems([rice, beans]);
+      await tester.pump();
+
+      final error = Theme.of(
+        tester.element(find.text('Rice')),
+      ).colorScheme.error;
+      expect(tester.widget<Text>(find.text('1 kg')).style?.color, error);
+      expect(tester.widget<Text>(find.text('2.5 kg')).style?.color, isNull);
+    });
+
+    testWidgets('a long name is cut short, not overflowing', (tester) async {
+      setWidth(tester, 760);
+      await _pumpCatalogue(tester, repository, purchases);
+      repository.emitItems([beans]);
+      await tester.pump();
+
+      final name = tester.widget<Text>(find.textContaining('Borlotti'));
+      expect(name.overflow, TextOverflow.ellipsis);
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('tapping a row opens the item', (tester) async {
+      setWidth(tester, 1000);
+      await _pumpCatalogue(tester, repository, purchases);
+      repository.emitItems([rice]);
+      await tester.pump();
+
+      await tester.tap(find.text('Rice'));
+      await tester.pump();
+      await tester.pump(const Duration(seconds: 1));
+
+      expect(find.byType(ItemDetailPage), findsOneWidget);
+    });
   });
 
   testWidgets('the add action opens the form', (tester) async {
