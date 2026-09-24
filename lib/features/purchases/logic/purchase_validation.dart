@@ -86,8 +86,9 @@ String? validateDraft(PurchaseDraft draft, {required DateTime today}) {
     return 'Choose who paid';
   }
   for (final line in draft.lines) {
-    if (line.restockQuantity == null) {
-      return '${line.item.name} cannot be measured in ${line.unit.label}';
+    // An unmatched line has no item to measure, and records spend only.
+    if (line.item case final item? when line.restockQuantity == null) {
+      return '${item.name} cannot be measured in ${line.unit.label}';
     }
   }
   return null;

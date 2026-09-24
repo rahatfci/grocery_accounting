@@ -9,6 +9,7 @@ import '../../items/logic/item_validation.dart';
 import '../../members/data/member_repository.dart';
 import '../../members/logic/household_member.dart';
 import '../../receipts/data/receipt_picker.dart';
+import '../../receipts/data/receipt_reader.dart';
 import '../../receipts/data/receipt_store.dart';
 import '../../receipts/logic/receipt.dart';
 import '../../receipts/presentation/receipt_source_sheet.dart';
@@ -45,6 +46,7 @@ class RecordPurchasePage extends StatelessWidget {
         shoppingList: context.read<ShoppingListRepository>(),
         receiptPicker: context.read<ReceiptPicker>(),
         receipts: context.read<ReceiptStore>(),
+        receiptReader: context.read<ReceiptReader>(),
         currentUser: user,
       ),
       child: switch (startWith) {
@@ -76,8 +78,18 @@ class RecordPurchaseView extends StatelessWidget {
             RecordPurchaseFailure(:final failure) => _LoadFailure(
               message: failure.message,
             ),
-            RecordPurchaseReady(:final draft, :final items, :final payers) =>
-              _PurchaseForm(draft: draft, items: items, payers: payers),
+            RecordPurchaseReady(
+              :final draft,
+              :final items,
+              :final payers,
+              :final reading,
+            ) =>
+              _PurchaseForm(
+                draft: draft,
+                items: items,
+                payers: payers,
+                reading: reading,
+              ),
           },
         ),
       ),
@@ -114,8 +126,10 @@ class _PickOnOpenState extends State<_PickOnOpen> {
       return;
     }
     switch (outcome) {
-      case ReceiptPicked():
-        break;
+      case ReceiptPicked(:final notice):
+        if (notice != null) {
+          messenger.showSnackBar(SnackBar(content: Text(notice)));
+        }
       case ReceiptPickCancelled():
         navigator.pop();
       case ReceiptPickRefused(:final message):
@@ -168,11 +182,13 @@ class _PurchaseForm extends StatefulWidget {
     required this.draft,
     required this.items,
     required this.payers,
+    required this.reading,
   });
 
   final PurchaseDraft draft;
   final List<Item> items;
   final List<HouseholdMember> payers;
+  final bool reading;
 
   @override
   State<_PurchaseForm> createState() => _PurchaseFormState();
@@ -181,7 +197,11 @@ class _PurchaseForm extends StatefulWidget {
 class _PurchaseFormState extends State<_PurchaseForm> {
   final _formKey = GlobalKey<FormState>();
   late final TextEditingController _shopController;
-  late final TextEditingController _totalController;
+  late TextEditingController _totalController;
+
+  /// Bumped when a reading fills the total in, so the field starts over as
+  /// untouched instead of switching on validation for the whole form.
+  int _totalFieldVersion = 0;
 
   bool _saving = false;
 
@@ -193,7 +213,7 @@ class _PurchaseFormState extends State<_PurchaseForm> {
   List<Item> get _pickableItems => <Item>{
     ...widget.items,
     for (final line in widget.draft.lines)
-      if (line.createsItem) line.item,
+      if (line.item case final item? when line.createsItem) item,
   }.toList();
 
   @override
@@ -201,6 +221,25 @@ class _PurchaseFormState extends State<_PurchaseForm> {
     super.initState();
     _shopController = TextEditingController(text: widget.draft.shopName);
     _totalController = TextEditingController(text: widget.draft.totalText);
+  }
+
+  /// A reading can fill the total in after the field was built. What the
+  /// member types arrives here unchanged, so only a real difference counts.
+  ///
+  /// Setting the old controller's text would count as the member typing, and
+  /// the form would then flag every empty field at once. A new controller and
+  /// field keep the form untouched.
+  @override
+  void didUpdateWidget(_PurchaseForm oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    final total = widget.draft.totalText;
+    if (total != oldWidget.draft.totalText && total != _totalController.text) {
+      final previous = _totalController;
+      _totalController = TextEditingController(text: total);
+      _totalFieldVersion++;
+      // The old field still listens to it until this frame is built.
+      WidgetsBinding.instance.addPostFrameCallback((_) => previous.dispose());
+    }
   }
 
   @override
@@ -264,7 +303,12 @@ class _PurchaseFormState extends State<_PurchaseForm> {
       return;
     }
     final outcome = await cubit.pickReceipt(source);
-    if (outcome case ReceiptPickRefused(:final message)) {
+    final message = switch (outcome) {
+      ReceiptPickRefused(:final message) => message,
+      ReceiptPicked(:final notice) => notice,
+      ReceiptPickCancelled() => null,
+    };
+    if (message != null) {
       messenger.showSnackBar(SnackBar(content: Text(message)));
     }
   }
@@ -350,6 +394,7 @@ class _PurchaseFormState extends State<_PurchaseForm> {
               ),
               const SizedBox(height: 16),
               TextFormField(
+                key: ValueKey(_totalFieldVersion),
                 controller: _totalController,
                 enabled: !_saving,
                 decoration: const InputDecoration(
@@ -400,6 +445,7 @@ class _PurchaseFormState extends State<_PurchaseForm> {
               const SizedBox(height: 24),
               _ReceiptSection(
                 receipt: draft.receipt,
+                reading: widget.reading,
                 onAttach: _saving ? null : _attachReceipt,
                 onRemove: _saving ? null : cubit.removeReceipt,
               ),
@@ -456,11 +502,13 @@ class _PurchaseFormState extends State<_PurchaseForm> {
 class _ReceiptSection extends StatelessWidget {
   const _ReceiptSection({
     required this.receipt,
+    required this.reading,
     required this.onAttach,
     required this.onRemove,
   });
 
   final ReceiptPhoto? receipt;
+  final bool reading;
   final VoidCallback? onAttach;
   final VoidCallback? onRemove;
 
@@ -510,6 +558,7 @@ class _ReceiptSection extends StatelessWidget {
                 style: Theme.of(context).textTheme.titleMedium,
               ),
               const SizedBox(height: 8),
+              if (reading) const _ReadingProgress(),
               TextButton.icon(
                 onPressed: onAttach,
                 icon: const Icon(Icons.refresh),
@@ -524,6 +573,31 @@ class _ReceiptSection extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+class _ReadingProgress extends StatelessWidget {
+  const _ReadingProgress();
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      liveRegion: true,
+      child: Padding(
+        padding: const EdgeInsets.only(bottom: 8),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Reading receipt',
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+            const SizedBox(height: 4),
+            const LinearProgressIndicator(),
+          ],
+        ),
+      ),
     );
   }
 }
@@ -565,13 +639,29 @@ class _LineRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final quantity = '${formatDecimal(line.quantity)} ${line.unit.label}';
 
+    final colors = Theme.of(context).colorScheme;
+
     return ListTile(
       contentPadding: EdgeInsets.zero,
       onTap: onTap,
-      title: Text(line.item.name, maxLines: 1, overflow: TextOverflow.ellipsis),
+      // An unmatched line saves as spend only and restocks nothing, so it must
+      // stand out before it is committed by accident.
+      leading: line.isMatched
+          ? null
+          : Icon(
+              Icons.link_off,
+              color: colors.error,
+              semanticLabel: 'Not matched',
+            ),
+      title: Text(line.label, maxLines: 1, overflow: TextOverflow.ellipsis),
       // A line that will create an item is worth seeing before it is
       // committed, because nothing else in the app will announce it.
-      subtitle: Text(line.createsItem ? '$quantity - new item' : quantity),
+      subtitle: line.isMatched
+          ? Text(line.createsItem ? '$quantity - new item' : quantity)
+          : Text(
+              'Not matched - $quantity',
+              style: TextStyle(color: colors.error),
+            ),
       trailing: Row(
         mainAxisSize: MainAxisSize.min,
         children: [

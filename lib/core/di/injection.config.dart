@@ -15,6 +15,8 @@ import 'package:firebase_auth/firebase_auth.dart' as _i59;
 import 'package:flutter_local_notifications/flutter_local_notifications.dart'
     as _i163;
 import 'package:get_it/get_it.dart' as _i174;
+import 'package:google_mlkit_text_recognition/google_mlkit_text_recognition.dart'
+    as _i612;
 import 'package:grocery_accounting/core/di/injection.dart' as _i368;
 import 'package:grocery_accounting/features/auth/data/auth_repository.dart'
     as _i123;
@@ -36,8 +38,12 @@ import 'package:grocery_accounting/features/purchases/data/purchase_repository.d
     as _i384;
 import 'package:grocery_accounting/features/receipts/data/image_picker_receipt_picker.dart'
     as _i179;
+import 'package:grocery_accounting/features/receipts/data/ml_kit_receipt_reader.dart'
+    as _i1045;
 import 'package:grocery_accounting/features/receipts/data/receipt_picker.dart'
     as _i472;
+import 'package:grocery_accounting/features/receipts/data/receipt_reader.dart'
+    as _i691;
 import 'package:grocery_accounting/features/receipts/data/receipt_store.dart'
     as _i88;
 import 'package:grocery_accounting/features/receipts/data/supabase_receipt_store.dart'
@@ -67,9 +73,13 @@ extension GetItInjectableX on _i174.GetIt {
     gh.lazySingleton<_i59.FirebaseAuth>(() => firebaseModule.firebaseAuth);
     gh.lazySingleton<_i974.FirebaseFirestore>(() => firebaseModule.firestore);
     gh.lazySingleton<_i183.ImagePicker>(() => receiptsModule.imagePicker);
+    gh.lazySingleton<_i612.TextRecognizer>(() => receiptsModule.textRecognizer);
     gh.lazySingleton<_i519.Client>(() => receiptsModule.httpClient);
     gh.lazySingleton<_i163.FlutterLocalNotificationsPlugin>(
       () => notificationsModule.notifications,
+    );
+    gh.lazySingleton<_i691.ReceiptReader>(
+      () => _i1045.MlKitReceiptReader(gh<_i612.TextRecognizer>()),
     );
     gh.lazySingleton<_i285.ShoppingListRepository>(
       () =>

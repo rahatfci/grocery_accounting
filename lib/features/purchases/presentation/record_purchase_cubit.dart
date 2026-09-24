@@ -11,8 +11,10 @@ import '../../items/logic/item.dart';
 import '../../members/data/member_repository.dart';
 import '../../members/logic/household_member.dart';
 import '../../receipts/data/receipt_picker.dart';
+import '../../receipts/data/receipt_reader.dart';
 import '../../receipts/data/receipt_store.dart';
 import '../../receipts/logic/receipt.dart';
+import '../../receipts/logic/receipt_reading.dart';
 import '../../shopping_list/data/shopping_list_repository.dart';
 import '../../shopping_list/logic/shopping_entry.dart';
 import '../../shopping_list/logic/shopping_match.dart';
@@ -31,6 +33,7 @@ class RecordPurchaseCubit extends Cubit<RecordPurchaseState> {
     required this._shoppingList,
     required this._receiptPicker,
     required this._receipts,
+    required this._receiptReader,
     required AppUser currentUser,
     DateTime Function() now = DateTime.now,
   }) : _currentUser = currentUser,
@@ -46,6 +49,13 @@ class RecordPurchaseCubit extends Cubit<RecordPurchaseState> {
   final ShoppingListRepository _shoppingList;
   final ReceiptPicker _receiptPicker;
   final ReceiptStore _receipts;
+  final ReceiptReader _receiptReader;
+
+  /// True while a photo is being read, so the screen can say so.
+  bool _reading = false;
+
+  /// Set once the member picks a date, so a reading never overrides it.
+  bool _dateChosen = false;
   final AppUser _currentUser;
 
   /// Injected so the date the draft starts on, the future check and the
@@ -64,7 +74,10 @@ class RecordPurchaseCubit extends Cubit<RecordPurchaseState> {
   StreamSubscription<List<HouseholdMember>>? _membersSubscription;
   StreamSubscription<List<ShoppingEntry>>? _shoppingListSubscription;
 
-  void setDate(DateTime date) => _update(_draft.copyWith(date: date));
+  void setDate(DateTime date) {
+    _dateChosen = true;
+    _update(_draft.copyWith(date: date));
+  }
 
   void setShopName(String shopName) =>
       _update(_draft.copyWith(shopName: shopName));
@@ -100,13 +113,15 @@ class RecordPurchaseCubit extends Cubit<RecordPurchaseState> {
   void removeReceipt() => _update(_draft.copyWith(receipt: null));
 
   /// Asks the camera or gallery for a photo and attaches it, replacing any
-  /// photo already attached.
+  /// photo already attached. On a draft nothing has been entered into yet,
+  /// the photo is then read to prefill it.
   Future<ReceiptPickOutcome> pickReceipt(ReceiptSource source) async {
     final result = await _receiptPicker.pick(source);
     switch (result) {
       case Ok(value: final photo?):
+        final fresh = _draft.lines.isEmpty && _draft.totalText.trim().isEmpty;
         attachReceipt(photo);
-        return const ReceiptPicked();
+        return ReceiptPicked(notice: fresh ? await _read(photo) : null);
       case Ok():
         return const ReceiptPickCancelled();
       case Err(:final error):
@@ -118,6 +133,72 @@ class RecordPurchaseCubit extends Cubit<RecordPurchaseState> {
         }
         return ReceiptPickRefused(error.message);
     }
+  }
+
+  /// Reads [photo] into the draft, and returns what to tell the member when
+  /// nothing came of it.
+  ///
+  /// Only fills what is still empty: a total or date the member entered while
+  /// the reading ran is kept, and lines are only added to a draft with none.
+  Future<String?> _read(ReceiptPhoto photo) async {
+    _reading = true;
+    _emitReady();
+    final result = await _receiptReader.read(photo, today: _now());
+    _reading = false;
+    if (isClosed) {
+      return null;
+    }
+
+    switch (result) {
+      case Err(:final error):
+        addError(error.cause, error.stackTrace);
+        _emitReady();
+        return error.message;
+      case Ok(value: final reading):
+        // The photo was removed or replaced while it was being read.
+        if (!identical(_draft.receipt, photo)) {
+          _emitReady();
+          return null;
+        }
+        final applied = _apply(reading);
+        _update(applied ?? _draft);
+        return applied == null
+            ? 'Nothing could be read from the receipt. Fill it in by hand'
+            : null;
+    }
+  }
+
+  /// The draft with [reading] filled in, or null when it added nothing.
+  PurchaseDraft? _apply(ReceiptReading reading) {
+    var draft = _draft;
+    var changed = false;
+
+    final total = reading.total;
+    if (total != null && draft.totalText.trim().isEmpty) {
+      draft = draft.copyWith(totalText: formatReadAmount(total));
+      changed = true;
+    }
+    final date = reading.date;
+    if (date != null && !_dateChosen) {
+      draft = draft.copyWith(date: date);
+      changed = true;
+    }
+    if (reading.lines.isNotEmpty && draft.lines.isEmpty) {
+      draft = draft.copyWith(
+        lines: [
+          for (final line in reading.lines)
+            PurchaseDraftLine(
+              item: null,
+              quantity: line.quantity,
+              unit: line.unit,
+              lineTotal: line.lineTotal,
+              scannedText: line.rawText,
+            ),
+        ],
+      );
+      changed = true;
+    }
+    return changed ? draft.copyWith(scanned: true) : null;
   }
 
   /// Subscribes again after a failure, keeping what has been typed so far.
@@ -164,10 +245,9 @@ class RecordPurchaseCubit extends Cubit<RecordPurchaseState> {
           .commit(
             draft,
             now: _now(),
-            clearEntryIds: entriesClearedBy(
-              _entries,
-              draft.lines.map((line) => line.item),
-            ),
+            clearEntryIds: entriesClearedBy(_entries, [
+              for (final line in draft.lines) ?line.item,
+            ]),
             purchaseId: purchaseId,
             receiptImagePath: receiptPath,
           )
@@ -256,6 +336,7 @@ class RecordPurchaseCubit extends Cubit<RecordPurchaseState> {
         draft: _draft,
         items: items,
         payers: payerOptions(members, _currentUser),
+        reading: _reading,
       ),
     );
   }
@@ -279,3 +360,8 @@ class RecordPurchaseCubit extends Cubit<RecordPurchaseState> {
     return super.close();
   }
 }
+
+/// A read amount as the total field shows it: two decimals and a decimal
+/// comma, the way the receipt printed it.
+String formatReadAmount(double amount) =>
+    amount.toStringAsFixed(2).replaceAll('.', ',');

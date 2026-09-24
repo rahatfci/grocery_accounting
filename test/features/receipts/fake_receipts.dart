@@ -4,8 +4,10 @@ import 'dart:typed_data';
 import 'package:grocery_accounting/core/data_failure.dart';
 import 'package:grocery_accounting/core/result.dart';
 import 'package:grocery_accounting/features/receipts/data/receipt_picker.dart';
+import 'package:grocery_accounting/features/receipts/data/receipt_reader.dart';
 import 'package:grocery_accounting/features/receipts/data/receipt_store.dart';
 import 'package:grocery_accounting/features/receipts/logic/receipt.dart';
+import 'package:grocery_accounting/features/receipts/logic/receipt_reading.dart';
 
 /// A photo with a JPEG header, so it sniffs as one.
 ReceiptPhoto testPhoto([int marker = 1]) =>
@@ -58,5 +60,27 @@ class FakeReceiptStore implements ReceiptStore {
       throw thrown;
     }
     return 0;
+  }
+}
+
+class FakeReceiptReader implements ReceiptReader {
+  /// What the next read returns.
+  Result<ReceiptReading, ReceiptReadFailure> result = const Ok(
+    ReceiptReading.empty,
+  );
+
+  final reads = <ReceiptPhoto>[];
+
+  /// When set, a read waits on this, so a test can observe the progress.
+  Completer<void>? gate;
+
+  @override
+  Future<Result<ReceiptReading, ReceiptReadFailure>> read(
+    ReceiptPhoto photo, {
+    required DateTime today,
+  }) async {
+    reads.add(photo);
+    await gate?.future;
+    return result;
   }
 }

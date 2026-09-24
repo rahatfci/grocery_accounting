@@ -23,9 +23,13 @@ final class RecordPurchaseReady extends RecordPurchaseState {
     required this.draft,
     required this.items,
     required this.payers,
+    this.reading = false,
   });
 
   final PurchaseDraft draft;
+
+  /// A receipt photo is being read, and the draft may still change under it.
+  final bool reading;
 
   /// The catalogue, for the item picker. May be empty: an item can be created
   /// on the purchase itself.
@@ -34,7 +38,7 @@ final class RecordPurchaseReady extends RecordPurchaseState {
   final List<HouseholdMember> payers;
 
   @override
-  List<Object?> get props => [draft, items, payers];
+  List<Object?> get props => [draft, items, payers, reading];
 }
 
 final class RecordPurchaseFailure extends RecordPurchaseState {
@@ -97,7 +101,14 @@ sealed class ReceiptPickOutcome extends Equatable {
 
 /// A photo was picked and is now attached to the draft.
 final class ReceiptPicked extends ReceiptPickOutcome {
-  const ReceiptPicked();
+  const ReceiptPicked({this.notice});
+
+  /// Why reading it filled nothing in, when that is worth telling the
+  /// member.
+  final String? notice;
+
+  @override
+  List<Object?> get props => [notice];
 }
 
 final class ReceiptPickCancelled extends ReceiptPickOutcome {

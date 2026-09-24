@@ -12,6 +12,8 @@ import 'package:grocery_accounting/features/purchases/presentation/record_purcha
 import 'package:grocery_accounting/features/purchases/presentation/record_purchase_page.dart';
 import 'package:grocery_accounting/features/purchases/presentation/record_purchase_state.dart';
 import 'package:grocery_accounting/features/receipts/data/receipt_picker.dart';
+import 'package:grocery_accounting/features/items/logic/item_unit.dart';
+import 'package:grocery_accounting/features/receipts/logic/receipt_reading.dart';
 
 import '../../auth/fake_auth_repository.dart';
 import '../../items/fake_item_repository.dart';
@@ -39,10 +41,12 @@ void main() {
   late RecordPurchaseCubit cubit;
   late FakeReceiptPicker receiptPicker;
   late FakeReceiptStore receipts;
+  late FakeReceiptReader receiptReader;
 
   setUp(() {
     receiptPicker = FakeReceiptPicker();
     receipts = FakeReceiptStore();
+    receiptReader = FakeReceiptReader();
     purchases = FakePurchaseRepository();
     items = FakeItemRepository();
     members = FakeMemberRepository();
@@ -63,6 +67,7 @@ void main() {
       shoppingList: FakeShoppingListRepository(),
       receiptPicker: receiptPicker,
       receipts: receipts,
+      receiptReader: receiptReader,
       currentUser: testUser,
       now: () => _now,
     );
@@ -257,9 +262,9 @@ void main() {
       await _tap(tester, find.widgetWithText(FilledButton, 'Save purchase'));
 
       final line = purchases.committed.single.lines.single;
-      expect(line.item.id, isEmpty);
-      expect(line.item.name, 'Passata');
-      expect(line.item.dailyUsage, 0);
+      expect(line.item?.id, isEmpty);
+      expect(line.item?.name, 'Passata');
+      expect(line.item?.dailyUsage, 0);
       expect(line.quantity, 2);
     });
 
@@ -504,6 +509,7 @@ void main() {
         shoppingList: FakeShoppingListRepository(),
         receiptPicker: receiptPicker,
         receipts: receipts,
+        receiptReader: receiptReader,
         currentUser: testUser,
         now: () => _now,
       );
@@ -549,6 +555,107 @@ void main() {
         ),
         findsOneWidget,
       );
+    });
+  });
+
+  group('reading a receipt', () {
+    final reading = ReceiptReading(
+      total: 5.48,
+      date: DateTime(2026, 9, 20),
+      lines: const [
+        ScannedLine(
+          rawText: 'RISO ARBORIO',
+          quantity: 1,
+          unit: ItemUnit.kg,
+          lineTotal: 1.80,
+        ),
+      ],
+    );
+
+    Future<void> attachPhoto(WidgetTester tester) async {
+      await _tap(
+        tester,
+        find.widgetWithText(OutlinedButton, 'Attach receipt photo'),
+      );
+      await _tap(tester, find.text('Take photo'));
+    }
+
+    testWidgets('prefills the total and marks unmatched lines', (tester) async {
+      receiptReader.result = Ok(reading);
+      await pumpReady(tester);
+
+      await attachPhoto(tester);
+
+      expect(
+        tester.widget<TextFormField>(_field('Total')).controller?.text,
+        '5,48',
+      );
+      expect(find.text('20/09/2026'), findsOneWidget);
+      expect(find.text('RISO ARBORIO'), findsOneWidget);
+      expect(find.textContaining('Not matched'), findsOneWidget);
+      // Filling the total in is not the member typing, so the empty shop is
+      // not flagged yet.
+      expect(find.text('Enter a shop'), findsNothing);
+      expect(find.byIcon(Icons.link_off), findsOneWidget);
+    });
+
+    testWidgets('shows that it is reading', (tester) async {
+      receiptReader.gate = Completer<void>();
+      await pumpReady(tester);
+
+      await _tap(
+        tester,
+        find.widgetWithText(OutlinedButton, 'Attach receipt photo'),
+      );
+      await tester.tap(find.text('Take photo'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 500));
+
+      expect(find.text('Reading receipt'), findsOneWidget);
+
+      receiptReader.gate?.complete();
+      await tester.pumpAndSettle();
+
+      expect(find.text('Reading receipt'), findsNothing);
+    });
+
+    testWidgets('says so when nothing could be read', (tester) async {
+      await pumpReady(tester);
+
+      await attachPhoto(tester);
+
+      expect(
+        find.text('Nothing could be read from the receipt. Fill it in by hand'),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('matching a line keeps its receipt wording', (tester) async {
+      final rice = testItem(id: 'rice', name: 'Rice');
+      receiptReader.result = Ok(reading);
+      await pumpReady(tester, catalogue: [rice]);
+      await attachPhoto(tester);
+
+      await _tap(tester, find.text('RISO ARBORIO'));
+      await _tap(tester, find.byType(DropdownButtonFormField<Object>));
+      await _tap(tester, find.text('Rice').last);
+      await _tap(tester, find.widgetWithText(FilledButton, 'Save line'));
+
+      expect(find.textContaining('Not matched'), findsNothing);
+      final line = (cubit.state as RecordPurchaseReady).draft.lines.single;
+      expect(line.item, rice);
+      expect(line.scannedText, 'RISO ARBORIO');
+      expect(line.lineTotal, 1.80);
+    });
+
+    testWidgets('an unmatched line can be removed', (tester) async {
+      receiptReader.result = Ok(reading);
+      await pumpReady(tester);
+      await attachPhoto(tester);
+
+      await _tap(tester, find.byTooltip('Remove line'));
+
+      expect(find.text('RISO ARBORIO'), findsNothing);
     });
   });
 }

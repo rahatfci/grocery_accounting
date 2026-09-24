@@ -15,10 +15,17 @@ final class PurchaseDraftLine extends Equatable {
     required this.quantity,
     required this.unit,
     required this.lineTotal,
+    this.scannedText,
   });
 
   /// The catalogue item, or one with an empty id that the commit creates.
-  final Item item;
+  /// Null for a line read off a receipt that nobody has matched yet: it
+  /// records spend and restocks nothing.
+  final Item? item;
+
+  /// The receipt's own wording, for a line that came from a reading. Kept
+  /// after the line is matched, so a mis-mapping stays diagnosable.
+  final String? scannedText;
 
   final double quantity;
 
@@ -27,15 +34,28 @@ final class PurchaseDraftLine extends Equatable {
 
   final double lineTotal;
 
-  bool get createsItem => item.id.isEmpty;
+  bool get isMatched => item != null;
+
+  bool get createsItem => item?.id.isEmpty ?? false;
+
+  /// What the screen calls this line: the item once there is one, otherwise
+  /// the receipt's wording.
+  String get label => item?.name ?? scannedText ?? '';
+
+  /// What the purchase document keeps as `rawText`.
+  String get rawText => scannedText ?? item?.name ?? '';
 
   /// The quantity in the item's own unit, or null when the two cannot be
-  /// converted. The unit picker only offers convertible units and
-  /// `validateDraft` refuses the rest, so a commit never sees a null here.
-  double? get restockQuantity => convertToItemUnit(quantity, unit, item);
+  /// converted or there is no item. The unit picker only offers convertible
+  /// units and `validateDraft` refuses the rest, so a matched line never
+  /// reaches a commit with a null here.
+  double? get restockQuantity => switch (item) {
+    final item? => convertToItemUnit(quantity, unit, item),
+    null => null,
+  };
 
   @override
-  List<Object?> get props => [item, quantity, unit, lineTotal];
+  List<Object?> get props => [item, quantity, unit, lineTotal, scannedText];
 }
 
 const Object _unchanged = Object();
@@ -49,6 +69,7 @@ final class PurchaseDraft extends Equatable {
     required this.paidByUserId,
     required this.lines,
     this.receipt,
+    this.scanned = false,
   });
 
   /// A fresh draft: today's date, the signed-in member as payer, nothing else.
@@ -76,6 +97,10 @@ final class PurchaseDraft extends Equatable {
   /// The scontrino photo, or null. Compared by identity: see [ReceiptPhoto].
   final ReceiptPhoto? receipt;
 
+  /// Whether reading the receipt filled anything in, which makes the purchase
+  /// `scanned` rather than `manual`.
+  final bool scanned;
+
   /// The sum of the line totals, which the screen shows beside the receipt
   /// total. They are allowed to differ: discounts, deposits and unpriced lines
   /// are all normal, and the receipt total is what reports use.
@@ -102,12 +127,15 @@ final class PurchaseDraft extends Equatable {
     total: parseDecimal(totalText) ?? 0,
     paidByUserId: paidByUserId,
     receiptImagePath: receiptImagePath,
-    source: PurchaseSource.manual,
+    source: scanned ? PurchaseSource.scanned : PurchaseSource.manual,
     lines: [
       for (final line in lines)
         PurchaseLine(
-          itemId: resolveItemId(line.item),
-          rawText: line.item.name,
+          itemId: switch (line.item) {
+            final item? => resolveItemId(item),
+            null => null,
+          },
+          rawText: line.rawText,
           quantity: line.quantity,
           unit: line.unit,
           lineTotal: line.lineTotal,
@@ -122,6 +150,7 @@ final class PurchaseDraft extends Equatable {
     String? paidByUserId,
     List<PurchaseDraftLine>? lines,
     Object? receipt = _unchanged,
+    bool? scanned,
   }) => PurchaseDraft(
     date: date ?? this.date,
     shopName: shopName ?? this.shopName,
@@ -132,6 +161,7 @@ final class PurchaseDraft extends Equatable {
     receipt: identical(receipt, _unchanged)
         ? this.receipt
         : receipt as ReceiptPhoto?,
+    scanned: scanned ?? this.scanned,
   );
 
   @override
@@ -142,6 +172,7 @@ final class PurchaseDraft extends Equatable {
     paidByUserId,
     lines,
     receipt,
+    scanned,
   ];
 }
 
@@ -175,17 +206,19 @@ List<RestockTarget> restockTargets(Iterable<PurchaseDraftLine> lines) {
   final targets = <RestockTarget>[];
 
   for (final line in lines) {
+    final item = line.item;
     final quantity = line.restockQuantity;
-    if (quantity == null) {
-      // Unreachable from a valid draft: validation refuses a line whose unit
-      // cannot be converted rather than letting it restock nothing.
+    // An unmatched line restocks nothing, by decision. A matched line with no
+    // quantity is unreachable from a valid draft: validation refuses a unit
+    // that cannot be converted rather than letting it restock nothing.
+    if (item == null || quantity == null) {
       continue;
     }
-    final key = restockKey(line.item);
+    final key = restockKey(item);
     final index = indexByKey[key];
     if (index == null) {
       indexByKey[key] = targets.length;
-      targets.add(RestockTarget(item: line.item, quantity: quantity));
+      targets.add(RestockTarget(item: item, quantity: quantity));
     } else {
       final existing = targets[index];
       targets[index] = RestockTarget(

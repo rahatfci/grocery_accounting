@@ -141,6 +141,8 @@ class _PurchaseLineSheetState extends State<PurchaseLineSheet> {
         quantity: quantity,
         unit: _lineUnit,
         lineTotal: lineTotal,
+        // Matching a scanned line keeps what the receipt called it.
+        scannedText: widget.line?.scannedText,
       ),
     );
   }

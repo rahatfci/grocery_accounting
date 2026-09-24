@@ -10,6 +10,8 @@ import 'package:grocery_accounting/features/purchases/logic/purchase_draft.dart'
 import 'package:grocery_accounting/features/purchases/presentation/record_purchase_cubit.dart';
 import 'package:grocery_accounting/features/purchases/presentation/record_purchase_state.dart';
 import 'package:grocery_accounting/features/receipts/data/receipt_picker.dart';
+import 'package:grocery_accounting/features/receipts/logic/receipt_reading.dart';
+import 'package:grocery_accounting/features/receipts/data/receipt_reader.dart';
 
 import '../../auth/fake_auth_repository.dart';
 import '../../items/fake_item_repository.dart';
@@ -38,10 +40,12 @@ void main() {
   late FakeShoppingListRepository shoppingList;
   late FakeReceiptPicker receiptPicker;
   late FakeReceiptStore receipts;
+  late FakeReceiptReader receiptReader;
 
   setUp(() {
     receiptPicker = FakeReceiptPicker();
     receipts = FakeReceiptStore();
+    receiptReader = FakeReceiptReader();
     purchases = FakePurchaseRepository();
     items = FakeItemRepository();
     members = FakeMemberRepository();
@@ -56,6 +60,7 @@ void main() {
       shoppingList: shoppingList,
       receiptPicker: receiptPicker,
       receipts: receipts,
+      receiptReader: receiptReader,
       currentUser: testUser,
       now: () => _now,
     );
@@ -410,6 +415,7 @@ void main() {
       shoppingList: shoppingList,
       receiptPicker: receiptPicker,
       receipts: receipts,
+      receiptReader: receiptReader,
       currentUser: testUser,
       now: () => _now,
     );
@@ -632,7 +638,9 @@ void main() {
 
       expect(
         await cubit.pickReceipt(ReceiptSource.camera),
-        const ReceiptPicked(),
+        const ReceiptPicked(
+          notice: 'Nothing could be read from the receipt. Fill it in by hand',
+        ),
       );
       expect(receiptPicker.sources, [ReceiptSource.camera]);
       expect(draftOf(cubit).receipt, same(photo));
@@ -677,6 +685,167 @@ void main() {
         outcome,
         const ReceiptPickRefused('Could not open the camera or gallery'),
       );
+    });
+  });
+
+  group('reading a receipt', () {
+    final reading = ReceiptReading(
+      total: 5.48,
+      date: DateTime(2026, 9, 20),
+      lines: const [
+        ScannedLine(
+          rawText: 'YOGURT BIANCO',
+          quantity: 2,
+          unit: ItemUnit.pcs,
+          lineTotal: 2.58,
+        ),
+        ScannedLine(
+          rawText: 'MELE GOLDEN',
+          quantity: 0.45,
+          unit: ItemUnit.kg,
+          lineTotal: 2.90,
+        ),
+      ],
+    );
+
+    test('prefills a fresh draft with unmatched lines', () async {
+      final cubit = await ready();
+      receiptReader.result = Ok(reading);
+
+      final outcome = await cubit.pickReceipt(ReceiptSource.camera);
+
+      expect(outcome, const ReceiptPicked());
+      final draft = draftOf(cubit);
+      expect(draft.totalText, '5,48');
+      expect(draft.date, DateTime(2026, 9, 20));
+      expect(draft.scanned, isTrue);
+      expect(draft.lines.map((l) => l.scannedText), [
+        'YOGURT BIANCO',
+        'MELE GOLDEN',
+      ]);
+      expect(draft.lines.every((l) => !l.isMatched), isTrue);
+      expect(draft.lines.last.unit, ItemUnit.kg);
+      expect(receiptReader.reads.single, same(draft.receipt));
+    });
+
+    test('does not read a draft that already has a total', () async {
+      final cubit = await ready();
+      cubit.setTotalText('9,99');
+      receiptReader.result = Ok(reading);
+
+      final outcome = await cubit.pickReceipt(ReceiptSource.gallery);
+
+      expect(outcome, const ReceiptPicked());
+      expect(receiptReader.reads, isEmpty);
+      expect(draftOf(cubit).totalText, '9,99');
+      expect(draftOf(cubit).scanned, isFalse);
+    });
+
+    test('does not read a draft that already has lines', () async {
+      final cubit = await ready();
+      cubit.addLine(
+        PurchaseDraftLine(
+          item: testItem(),
+          quantity: 1,
+          unit: ItemUnit.kg,
+          lineTotal: 1,
+        ),
+      );
+
+      await cubit.pickReceipt(ReceiptSource.gallery);
+
+      expect(receiptReader.reads, isEmpty);
+      expect(draftOf(cubit).lines, hasLength(1));
+    });
+
+    test('keeps a date the member chose', () async {
+      final cubit = await ready();
+      cubit.setDate(DateTime(2026, 9, 18));
+      receiptReader.result = Ok(reading);
+
+      await cubit.pickReceipt(ReceiptSource.camera);
+
+      expect(draftOf(cubit).date, DateTime(2026, 9, 18));
+      expect(draftOf(cubit).totalText, '5,48');
+    });
+
+    test('says so when nothing could be read', () async {
+      final cubit = await ready();
+
+      final outcome = await cubit.pickReceipt(ReceiptSource.camera);
+
+      expect(
+        outcome,
+        const ReceiptPicked(
+          notice: 'Nothing could be read from the receipt. Fill it in by hand',
+        ),
+      );
+      expect(draftOf(cubit).scanned, isFalse);
+      expect(draftOf(cubit).receipt, isNotNull);
+    });
+
+    test('a failed read keeps the photo, says so and is reported', () async {
+      final observer = _RecordingObserver();
+      Bloc.observer = observer;
+      addTearDown(() => Bloc.observer = _RecordingObserver());
+      final cubit = await ready();
+      final cause = StateError('ml kit');
+      receiptReader.result = Err(ReceiptReadFailure(cause, StackTrace.empty));
+
+      final outcome = await cubit.pickReceipt(ReceiptSource.camera);
+
+      expect(
+        outcome,
+        const ReceiptPicked(
+          notice: 'Could not read the receipt. Fill it in by hand',
+        ),
+      );
+      expect(observer.reported, [cause]);
+      expect(draftOf(cubit).receipt, isNotNull);
+      expect(draftOf(cubit).lines, isEmpty);
+    });
+
+    test('shows it is reading while the read runs', () async {
+      final cubit = await ready();
+      receiptReader.gate = Completer<void>();
+      receiptReader.result = Ok(reading);
+
+      final picking = cubit.pickReceipt(ReceiptSource.camera);
+      await pumpEventQueue();
+
+      expect((cubit.state as RecordPurchaseReady).reading, isTrue);
+
+      receiptReader.gate?.complete();
+      await picking;
+
+      expect((cubit.state as RecordPurchaseReady).reading, isFalse);
+    });
+
+    test('a photo removed during the read is not applied', () async {
+      final cubit = await ready();
+      receiptReader.gate = Completer<void>();
+      receiptReader.result = Ok(reading);
+
+      final picking = cubit.pickReceipt(ReceiptSource.camera);
+      await pumpEventQueue();
+      cubit.removeReceipt();
+      receiptReader.gate?.complete();
+      await picking;
+
+      expect(draftOf(cubit).lines, isEmpty);
+      expect(draftOf(cubit).totalText, isEmpty);
+    });
+
+    test('saves a read purchase with its unmatched lines', () async {
+      final cubit = await ready();
+      receiptReader.result = Ok(reading);
+      await cubit.pickReceipt(ReceiptSource.camera);
+      cubit.setShopName('Conad');
+
+      expect(await cubit.commit(), const CommitSucceeded());
+      final committed = purchases.committed.single;
+      expect(committed.scanned, isTrue);
+      expect(committed.lines.where((l) => !l.isMatched), hasLength(2));
     });
   });
 }

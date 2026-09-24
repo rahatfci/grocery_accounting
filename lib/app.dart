@@ -8,6 +8,7 @@ import 'features/items/data/item_repository.dart';
 import 'features/members/data/member_repository.dart';
 import 'features/purchases/data/purchase_repository.dart';
 import 'features/receipts/data/receipt_picker.dart';
+import 'features/receipts/data/receipt_reader.dart';
 import 'features/receipts/data/receipt_store.dart';
 import 'features/reminders/data/run_out_notifier.dart';
 import 'features/shopping_list/data/shopping_list_repository.dart';
@@ -22,6 +23,7 @@ class GroceryAccountingApp extends StatelessWidget {
     required this.shoppingListRepository,
     required this.receiptPicker,
     required this.receiptStore,
+    required this.receiptReader,
     super.key,
   });
 
@@ -54,6 +56,9 @@ class GroceryAccountingApp extends StatelessWidget {
   final ReceiptPicker receiptPicker;
   final ReceiptStore receiptStore;
 
+  /// Resolved in `main` as well. The purchase screen reads receipts through it.
+  final ReceiptReader receiptReader;
+
   @override
   Widget build(BuildContext context) {
     return MultiRepositoryProvider(
@@ -65,6 +70,7 @@ class GroceryAccountingApp extends StatelessWidget {
         RepositoryProvider.value(value: shoppingListRepository),
         RepositoryProvider.value(value: receiptPicker),
         RepositoryProvider.value(value: receiptStore),
+        RepositoryProvider.value(value: receiptReader),
       ],
       child: BlocProvider(
         create: (_) => authCubit,

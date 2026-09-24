@@ -2,6 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:get_it/get_it.dart';
+import 'package:google_mlkit_text_recognition/google_mlkit_text_recognition.dart';
 import 'package:http/http.dart' as http;
 import 'package:image_picker/image_picker.dart';
 import 'package:injectable/injectable.dart';
@@ -26,6 +27,10 @@ abstract class FirebaseModule {
 abstract class ReceiptsModule {
   @lazySingleton
   ImagePicker get imagePicker => ImagePicker();
+
+  /// On-device OCR. Only Android and iOS ever call it.
+  @lazySingleton
+  TextRecognizer get textRecognizer => TextRecognizer();
 
   /// Receipt photos go to Supabase Storage over its REST API.
   @lazySingleton

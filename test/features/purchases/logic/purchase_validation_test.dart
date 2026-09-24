@@ -165,4 +165,24 @@ void main() {
       );
     });
   });
+
+  test('validateDraft accepts an unmatched line, which is spend only', () {
+    final draft = PurchaseDraft(
+      date: DateTime(2026, 9, 21),
+      shopName: 'Conad',
+      totalText: '43,20',
+      paidByUserId: 'abc123',
+      lines: const [
+        PurchaseDraftLine(
+          item: null,
+          quantity: 1,
+          unit: ItemUnit.pcs,
+          lineTotal: 2,
+          scannedText: 'PANE',
+        ),
+      ],
+    );
+
+    expect(validateDraft(draft, today: DateTime(2026, 9, 21)), isNull);
+  });
 }

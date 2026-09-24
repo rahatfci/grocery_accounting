@@ -183,4 +183,77 @@ void main() {
       expect(restockKey(fresh), fresh);
     });
   });
+
+  group('lines read off a receipt', () {
+    const unmatched = PurchaseDraftLine(
+      item: null,
+      quantity: 2,
+      unit: ItemUnit.pcs,
+      lineTotal: 2.58,
+      scannedText: 'YOGURT BIANCO',
+    );
+
+    PurchaseDraft draftWith(
+      List<PurchaseDraftLine> lines, {
+      bool scanned = false,
+    }) => PurchaseDraft(
+      date: DateTime(2026, 9, 24),
+      shopName: 'Conad',
+      totalText: '5',
+      paidByUserId: 'u1',
+      lines: lines,
+      scanned: scanned,
+    );
+
+    test('an unmatched line records spend with no item', () {
+      final purchase = draftWith([unmatched]).toPurchase(resolveItemId: _byId);
+
+      final line = purchase.lines.single;
+      expect(line.itemId, isNull);
+      expect(line.rawText, 'YOGURT BIANCO');
+      expect(line.quantity, 2);
+      expect(line.lineTotal, 2.58);
+      expect(purchase.itemIds, isEmpty);
+    });
+
+    test('an unmatched line restocks nothing', () {
+      expect(restockTargets([unmatched, _line(rice)]), [
+        RestockTarget(item: rice, quantity: 1),
+      ]);
+      expect(unmatched.restockQuantity, isNull);
+      expect(unmatched.isMatched, isFalse);
+      expect(unmatched.createsItem, isFalse);
+      expect(unmatched.label, 'YOGURT BIANCO');
+    });
+
+    test('a matched scanned line keeps the receipt wording', () {
+      final matched = PurchaseDraftLine(
+        item: rice,
+        quantity: 1,
+        unit: rice.unit,
+        lineTotal: 1.8,
+        scannedText: 'RISO ARBORIO 1KG',
+      );
+
+      final line = draftWith([
+        matched,
+      ]).toPurchase(resolveItemId: _byId).lines.single;
+
+      expect(matched.label, 'Rice');
+      expect(line.itemId, 'rice');
+      expect(line.rawText, 'RISO ARBORIO 1KG');
+    });
+
+    test('source follows whether anything was read', () {
+      expect(
+        draftWith([]).toPurchase(resolveItemId: _byId).source,
+        PurchaseSource.manual,
+      );
+      expect(
+        draftWith([], scanned: true).toPurchase(resolveItemId: _byId).source,
+        PurchaseSource.scanned,
+      );
+      expect(draftWith([]).copyWith(scanned: true).scanned, isTrue);
+    });
+  });
 }
