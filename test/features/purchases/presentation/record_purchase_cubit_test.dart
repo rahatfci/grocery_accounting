@@ -487,6 +487,9 @@ void main() {
     });
 
     test('a list failure neither blocks nor fails the screen', () async {
+      final observer = _RecordingObserver();
+      Bloc.observer = observer;
+      addTearDown(() => Bloc.observer = _RecordingObserver());
       final cubit = build();
       shoppingList.emitError(const ConnectionUnavailable());
       items.emitItems(const []);
@@ -494,6 +497,7 @@ void main() {
       await Future<void>.delayed(Duration.zero);
 
       expect(cubit.state, isA<RecordPurchaseReady>());
+      expect(observer.reported, [const ConnectionUnavailable()]);
 
       cubit.setShopName('Conad');
       cubit.setTotalText('10');

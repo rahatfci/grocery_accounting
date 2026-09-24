@@ -16,8 +16,9 @@ final _purchaseId = RegExp(r'^[A-Za-z0-9]+$');
 
 /// Where the receipt for [purchaseId] lives in Storage.
 ///
-/// One object per purchase, so an upload that is retried overwrites itself
-/// rather than piling up copies.
+/// One object per purchase, so a retried upload cannot pile up copies. An
+/// upload never overwrites: an object already at this path is the same photo
+/// and counts as stored.
 String receiptStoragePath(String purchaseId) => 'receipts/$purchaseId';
 
 /// The name a queued receipt is kept under on the device.

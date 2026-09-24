@@ -218,14 +218,15 @@ class RecordPurchaseCubit extends Cubit<RecordPurchaseState> {
     _subscribe();
   }
 
-  /// Writes the purchase and restocks everything on it, keeping the receipt
-  /// photo first so the purchase can point at it.
+  /// Writes the purchase and restocks everything on it. The receipt photo is
+  /// kept first, but kept uploads nothing: it is confirmed, and so queued or
+  /// uploaded, only once the commit succeeds, and discarded when it is
+  /// refused.
   ///
   /// Offline the Firestore write only completes once the server acknowledges
   /// it, so a commit still pending after [refusalWindow] counts as done: it is
   /// already queued, and a refusal would have arrived by then. The window
-  /// covers the Firestore write only, not keeping the photo, which on web is
-  /// an upload.
+  /// covers the Firestore write only.
   Future<CommitOutcome> commit() async {
     final invalid = validateDraft(_draft, today: _now());
     if (invalid != null) {

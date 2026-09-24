@@ -186,6 +186,7 @@ void main() {
     await tester.pump();
 
     expect(authRepository.signOutCalls, 1);
+    expect(find.text('Could not sign out. Try again.'), findsNothing);
   });
 
   testWidgets('a failed sign out says so', (tester) async {

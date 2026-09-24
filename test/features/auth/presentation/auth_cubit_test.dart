@@ -263,11 +263,15 @@ void main() {
   test('a failed sign out is reported and returns false', () async {
     final observer = _installObserver();
     final thrown = StateError('channel died');
-    repository.signOutThrows = thrown;
+    final thrownTrace = StackTrace.fromString('#0 signOut');
+    repository
+      ..signOutThrows = thrown
+      ..signOutThrowsStackTrace = thrownTrace;
     final cubit = AuthCubit(repository);
 
     expect(await cubit.signOut(), isFalse);
     expect(observer.errors.single.$1, same(thrown));
+    expect(observer.errors.single.$2, same(thrownTrace));
 
     await cubit.close();
   });

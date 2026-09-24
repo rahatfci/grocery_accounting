@@ -2,10 +2,10 @@ import '../../../core/data_failure.dart';
 import '../../../core/result.dart';
 import '../logic/receipt.dart';
 
-/// Where receipt photos go: Firebase Storage, through a queue on the device
+/// Where receipt photos go: Supabase Storage, through a queue on the device
 /// on phones.
 ///
-/// Implementations own every Firebase and file system type.
+/// Implementations own every storage and file system type.
 abstract interface class ReceiptStore {
   /// Whether photos wait on the device and upload later. True on phones,
   /// where the purchase can record the photo's path at once. False on web,

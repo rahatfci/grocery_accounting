@@ -26,8 +26,9 @@ final class ItemsLoaded extends ItemsState {
 
   final List<Item> items;
 
-  /// The moment current stock is shown for. Taken when the stream reported,
-  /// so every row on screen is derived against the same instant.
+  /// The moment current stock is shown for. Taken when the stream reports or
+  /// the catalogue is refreshed, so every row on screen is derived against the
+  /// same instant.
   final DateTime now;
 
   @override

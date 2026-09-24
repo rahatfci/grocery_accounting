@@ -18,6 +18,9 @@ class FakeAuthRepository implements AuthRepository {
   StackTrace? signInThrowsStackTrace;
 
   Object? signOutThrows;
+
+  /// The trace [signOutThrows] is thrown with, as for [signInThrowsStackTrace].
+  StackTrace? signOutThrowsStackTrace;
   int signOutCalls = 0;
 
   /// When set, `signIn` waits on this instead of returning at once, so a test
@@ -58,6 +61,10 @@ class FakeAuthRepository implements AuthRepository {
     signOutCalls++;
     final thrown = signOutThrows;
     if (thrown != null) {
+      final stackTrace = signOutThrowsStackTrace;
+      if (stackTrace != null) {
+        Error.throwWithStackTrace(thrown, stackTrace);
+      }
       throw thrown;
     }
   }
