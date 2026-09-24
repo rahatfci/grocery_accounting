@@ -355,4 +355,35 @@ void main() {
     // On the catalogue's own cubit, not a second subscription.
     expect(repository.watchCalls, 1);
   });
+
+  testWidgets('coming back to the app runs stock down to the current day', (
+    tester,
+  ) async {
+    var clock = _now;
+    final cubit = ItemsCubit(repository, purchases, clock: () => clock);
+    addTearDown(cubit.close);
+    await tester.pumpWidget(
+      MaterialApp(
+        home: BlocProvider.value(
+          value: cubit,
+          child: const ItemListView(user: testUser),
+        ),
+      ),
+    );
+    // 3 kg at the baseline, a quarter kilo a day, two days on.
+    repository.emitItems([
+      testItem(lowThreshold: 1).copyWith(stockAtBaseline: 3),
+    ]);
+    await tester.pump();
+    expect(find.text('2.5 kg'), findsOneWidget);
+
+    // Two more days pass with the app in the background and no item written.
+    clock = _now.add(const Duration(days: 2));
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    await tester.pump();
+
+    expect(find.text('2.5 kg'), findsNothing);
+    expect(find.text('2 kg'), findsOneWidget);
+  });
 }

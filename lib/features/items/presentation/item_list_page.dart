@@ -42,31 +42,68 @@ class ItemListView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text('Catalogue')),
-      body: SafeArea(
-        child: BlocBuilder<ItemsCubit, ItemsState>(
-          builder: (context, state) => switch (state) {
-            ItemsLoading() => const Center(child: CircularProgressIndicator()),
-            ItemsEmpty() => const _CatalogueEmpty(),
-            ItemsFailure(:final failure) => _CatalogueFailure(
-              message: failure.message,
-            ),
-            ItemsLoaded(:final items, :final now) => _ItemList(
-              items: items,
-              now: now,
-              user: user,
-            ),
-          },
+    return _RefreshOnResume(
+      child: Scaffold(
+        appBar: AppBar(title: const Text('Catalogue')),
+        body: SafeArea(
+          child: BlocBuilder<ItemsCubit, ItemsState>(
+            builder: (context, state) => switch (state) {
+              ItemsLoading() => const Center(
+                child: CircularProgressIndicator(),
+              ),
+              ItemsEmpty() => const _CatalogueEmpty(),
+              ItemsFailure(:final failure) => _CatalogueFailure(
+                message: failure.message,
+              ),
+              ItemsLoaded(:final items, :final now) => _ItemList(
+                items: items,
+                now: now,
+                user: user,
+              ),
+            },
+          ),
         ),
-      ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => openItemForm(context),
-        icon: const Icon(Icons.add),
-        label: const Text('Add item'),
+        floatingActionButton: FloatingActionButton.extended(
+          onPressed: () => openItemForm(context),
+          icon: const Icon(Icons.add),
+          label: const Text('Add item'),
+        ),
       ),
     );
   }
+}
+
+/// Re-derives stock when the app comes back to the foreground. The detail
+/// screen reads the same cubit and this view stays mounted beneath it, so one
+/// listener covers both.
+class _RefreshOnResume extends StatefulWidget {
+  const _RefreshOnResume({required this.child});
+
+  final Widget child;
+
+  @override
+  State<_RefreshOnResume> createState() => _RefreshOnResumeState();
+}
+
+class _RefreshOnResumeState extends State<_RefreshOnResume> {
+  late final AppLifecycleListener _listener;
+
+  @override
+  void initState() {
+    super.initState();
+    _listener = AppLifecycleListener(
+      onResume: () => context.read<ItemsCubit>().refresh(),
+    );
+  }
+
+  @override
+  void dispose() {
+    _listener.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => widget.child;
 }
 
 /// Opens an item's detail screen, on the catalogue's own cubit so it follows

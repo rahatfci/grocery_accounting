@@ -90,58 +90,6 @@ minimum report through `addError` so the failure is visible. No current
 requirement is lost.
 **Resolution:**
 
-### F-09 [P3] open - `blueprint/` and `.claude/` are tracked, against the stated local-only contract
-
-**File:** .gitignore:47-53
-**Found:** 2026-09-21 by /audit (scope: current; lens: quality)
-**Why it matters:** `CLAUDE.md` and `blueprint/context/workflow.md` both state
-this project runs in local-only visibility and that `.claude/`, `blueprint/` and
-`CLAUDE.md` are gitignored, with `AGENTS.md` kept free of workflow contents. In
-fact 15 `blueprint/` files and 35 `.claude/` files are tracked against the remote
-`github.com/rahatfci/grocery_accounting`, and this commit adds 355 lines of spec
-to `blueprint/context/current-feature.md` plus a workflow-verification section to
-`blueprint/context/platform.md`. The only path this delta actually ignored is
-`blueprint/.state/run.json`, which it correctly untracked.
-
-No secret is exposed: the spec carries the project id, device names and process
-notes, all non-sensitive, and `.firebaserc` carries the same project id by
-design. This is a contract mismatch, not a leak.
-
-**Suggested fix:** Pick one and make the two agree. Either ignore and untrack the
-two trees as the contract says, or amend `CLAUDE.md` and
-`blueprint/context/workflow.md` to say the Blueprint is tracked on this project.
-The first removes shipped state from the repo, so it needs an explicit user
-decision rather than an automatic repair. No current requirement is lost either
-way.
-**Resolution:**
-
-### F-11 [P2] open - Displayed stock is frozen at the last stream emission
-
-**File:** lib/features/items/presentation/items_cubit.dart:124-125
-**Found:** 2026-09-23 by /audit independent (scope: current; lens: quality)
-**Why it matters:** `ItemsLoaded.now` is taken only when `watchItems()` emits,
-and both the catalogue row and the detail screen derive current stock from it.
-A Firestore snapshot listener does not re-emit on its own, so if the catalogue
-or detail screen stays on the stack (for example the app is backgrounded
-overnight and resumed), the shown stock stays at the old instant until some
-write to `items` arrives. The spec's goal is that staples "visibly run down day
-by day". The write path is unaffected (the cubit passes a fresh `_clock()` to
-the repository), so the member can log use against a number that is hours or a
-day stale, and the result then jumps. The repository doc comment says the new
-stock "is computed from the number on their screen", which is only true while
-the screen is fresh.
-
-**Suggested fix:** Refresh `now` without new data: re-emit
-`ItemsLoaded(items, now: _clock())` when the app resumes (an
-`AppLifecycleListener` on the page calling a small cubit method), or on a coarse
-periodic timer cancelled in `close()`. Either keeps the injected clock and the
-existing tests. No current requirement is lost.
-**Resolution:** Re-examined 2026-09-23 by /audit independent at 3813c40: still
-present, `now` is taken only in `_onItemsChanged` (items_cubit.dart:124-125).
-Remains open at P2.
-Re-examined 2026-09-23 by /audit independent at 6f3ea7a: unchanged, still
-open at P2. The write path still uses a fresh `_clock()` (items_cubit.dart:109).
-
 ### F-12 [P3] open - The purchase screen's shopping list failure report is never asserted
 
 **File:** test/features/purchases/presentation/record_purchase_cubit_test.dart:453-481
@@ -228,4 +176,19 @@ half is unguarded.
 example `contains('fake_auth_repository.dart')`, or have the fake throw with a
 known trace via `Error.throwWithStackTrace` and compare with `same`. Test only;
 no current requirement is lost.
+**Resolution:**
+
+### F-16 [P3] open - `ItemsLoaded.now` doc still says it is taken only when the stream reports
+
+**File:** lib/features/items/presentation/items_state.dart:29-30
+**Found:** 2026-09-24 by /audit independent (scope: current; lens: quality)
+**Why it matters:** The field doc reads "Taken when the stream reported, so
+every row on screen is derived against the same instant." After this fix,
+`ItemsCubit.refresh()` (items_cubit.dart:46-50) also re-stamps `now` on app
+resume with no stream emission. A reader trusting the comment would conclude
+that stale stock is still possible, or that `now` changing implies new item
+data, which is exactly the assumption F-11 was about.
+**Suggested fix:** Reword to say `now` is taken when the stream reports and
+again when the catalogue is refreshed on resume, still one instant for every
+row. Comment only; no current requirement is lost.
 **Resolution:**

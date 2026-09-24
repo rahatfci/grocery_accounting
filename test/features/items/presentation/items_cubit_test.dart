@@ -398,4 +398,55 @@ void main() {
       await cubit.close();
     });
   });
+
+  group('refresh', () {
+    test('re-derives a loaded catalogue at the current time', () async {
+      var clock = now;
+      final cubit = ItemsCubit(repository, purchases, clock: () => clock);
+      final items = [testItem()];
+      repository.emitItems(items);
+      await Future<void>.delayed(Duration.zero);
+
+      clock = now.add(const Duration(days: 1));
+      cubit.refresh();
+
+      expect(cubit.state, ItemsLoaded(items, now: clock));
+
+      await cubit.close();
+    });
+
+    test('does nothing before the catalogue has loaded', () async {
+      final cubit = ItemsCubit(repository, purchases, clock: () => now);
+
+      cubit.refresh();
+
+      expect(cubit.state, const ItemsLoading());
+
+      await cubit.close();
+    });
+
+    test('does nothing for an empty catalogue', () async {
+      final cubit = ItemsCubit(repository, purchases, clock: () => now);
+      repository.emitItems(const []);
+      await Future<void>.delayed(Duration.zero);
+
+      cubit.refresh();
+
+      expect(cubit.state, const ItemsEmpty());
+
+      await cubit.close();
+    });
+
+    test('does nothing after a failure', () async {
+      final cubit = ItemsCubit(repository, purchases, clock: () => now);
+      repository.emitError(const ConnectionUnavailable());
+      await Future<void>.delayed(Duration.zero);
+
+      cubit.refresh();
+
+      expect(cubit.state, const ItemsFailure(ConnectionUnavailable()));
+
+      await cubit.close();
+    });
+  });
 }

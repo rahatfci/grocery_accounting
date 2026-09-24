@@ -38,6 +38,17 @@ class ItemsCubit extends Cubit<ItemsState> {
     _subscribe();
   }
 
+  /// Re-derives the loaded catalogue at the current time.
+  ///
+  /// The stream only reports when an item changes, so without this a screen
+  /// left open, for example across a night in the background, keeps showing
+  /// stock for the moment it last reported.
+  void refresh() {
+    if (state case ItemsLoaded(:final items)) {
+      emit(ItemsLoaded(items, now: _clock()));
+    }
+  }
+
   /// Writes an item: a create when it has no document id yet, an update
   /// otherwise.
   ///
