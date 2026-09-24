@@ -6,6 +6,10 @@
 	<true/>
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
+	<key>NSCameraUsageDescription</key>
+	<string>Photograph receipts so each purchase keeps its scontrino.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Choose a receipt photo you already took.</string>
 	<key>CFBundleDisplayName</key>
 	<string>Grocery Accounting di Quattro Nero</string>
 	<key>CFBundleExecutable</key>

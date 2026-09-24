@@ -27,6 +27,8 @@ class FirestorePurchaseRepository implements PurchaseRepository {
     PurchaseDraft draft, {
     required DateTime now,
     Set<String> clearEntryIds = const {},
+    String? purchaseId,
+    String? receiptImagePath,
   }) async {
     final targets = restockTargets(draft.lines);
 
@@ -42,10 +44,11 @@ class FirestorePurchaseRepository implements PurchaseRepository {
 
     final purchase = draft.toPurchase(
       resolveItemId: (item) => documents[restockKey(item)]?.id,
+      receiptImagePath: receiptImagePath,
     );
 
     final batch = _firestore.batch();
-    batch.set(_purchases.doc(), purchaseToFirestore(purchase));
+    batch.set(_purchases.doc(purchaseId), purchaseToFirestore(purchase));
 
     // A client timestamp, not the server's: offline a server timestamp
     // resolves at sync time, which can be days after the stock number it is
@@ -116,6 +119,9 @@ class FirestorePurchaseRepository implements PurchaseRepository {
         (Object error, StackTrace stackTrace) =>
             Error.throwWithStackTrace(dataFailureFromError(error), stackTrace),
       );
+
+  @override
+  String newPurchaseId() => _purchases.doc().id;
 
   @override
   Future<Result<bool, DataFailure>> isItemReferenced(String itemId) async {

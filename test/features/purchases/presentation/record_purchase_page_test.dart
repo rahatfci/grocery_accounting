@@ -10,10 +10,13 @@ import 'package:grocery_accounting/features/members/logic/household_member.dart'
 import 'package:grocery_accounting/features/purchases/presentation/purchase_line_sheet.dart';
 import 'package:grocery_accounting/features/purchases/presentation/record_purchase_cubit.dart';
 import 'package:grocery_accounting/features/purchases/presentation/record_purchase_page.dart';
+import 'package:grocery_accounting/features/purchases/presentation/record_purchase_state.dart';
+import 'package:grocery_accounting/features/receipts/data/receipt_picker.dart';
 
 import '../../auth/fake_auth_repository.dart';
 import '../../items/fake_item_repository.dart';
 import '../../members/fake_member_repository.dart';
+import '../../receipts/fake_receipts.dart';
 import '../../shopping_list/fake_shopping_list_repository.dart';
 import '../fake_purchase_repository.dart';
 
@@ -34,8 +37,12 @@ void main() {
   late FakeItemRepository items;
   late FakeMemberRepository members;
   late RecordPurchaseCubit cubit;
+  late FakeReceiptPicker receiptPicker;
+  late FakeReceiptStore receipts;
 
   setUp(() {
+    receiptPicker = FakeReceiptPicker();
+    receipts = FakeReceiptStore();
     purchases = FakePurchaseRepository();
     items = FakeItemRepository();
     members = FakeMemberRepository();
@@ -54,6 +61,8 @@ void main() {
       items: items,
       members: members,
       shoppingList: FakeShoppingListRepository(),
+      receiptPicker: receiptPicker,
+      receipts: receipts,
       currentUser: testUser,
       now: () => _now,
     );
@@ -413,6 +422,133 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('You do not have access to this data'), findsNothing);
+    });
+  });
+
+  group('receipt photo', () {
+    Future<void> attachFrom(WidgetTester tester, String source) async {
+      await _tap(
+        tester,
+        find.widgetWithText(OutlinedButton, 'Attach receipt photo'),
+      );
+      await _tap(tester, find.text(source));
+    }
+
+    testWidgets('attaches a photo from the camera or the gallery', (
+      tester,
+    ) async {
+      await pumpReady(tester);
+
+      await attachFrom(tester, 'Take photo');
+
+      expect(receiptPicker.sources, [ReceiptSource.camera]);
+      expect(find.bySemanticsLabel('Receipt photo'), findsOneWidget);
+      expect(find.text('Attach receipt photo'), findsNothing);
+    });
+
+    testWidgets('replaces and removes the attached photo', (tester) async {
+      await pumpReady(tester);
+      await attachFrom(tester, 'Choose from gallery');
+      final first = (cubit.state as RecordPurchaseReady).draft.receipt;
+
+      receiptPicker.result = Ok(testPhoto(9));
+      await _tap(tester, find.widgetWithText(TextButton, 'Replace'));
+      await _tap(tester, find.text('Choose from gallery'));
+
+      final second = (cubit.state as RecordPurchaseReady).draft.receipt;
+      expect(second, isNotNull);
+      expect(identical(first, second), isFalse);
+
+      await _tap(tester, find.widgetWithText(TextButton, 'Remove'));
+
+      expect((cubit.state as RecordPurchaseReady).draft.receipt, isNull);
+      expect(find.text('Attach receipt photo'), findsOneWidget);
+    });
+
+    testWidgets('dismissing the source sheet attaches nothing', (tester) async {
+      await pumpReady(tester);
+
+      await _tap(
+        tester,
+        find.widgetWithText(OutlinedButton, 'Attach receipt photo'),
+      );
+      await tester.tapAt(const Offset(10, 10));
+      await tester.pumpAndSettle();
+
+      expect(receiptPicker.sources, isEmpty);
+      expect(find.text('Attach receipt photo'), findsOneWidget);
+    });
+
+    testWidgets('a denied pick says why and attaches nothing', (tester) async {
+      await tester.binding.setSurfaceSize(const Size(400, 800));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      receiptPicker.result = const Err(ReceiptAccessDenied());
+      await pumpReady(tester);
+
+      await attachFrom(tester, 'Take photo');
+
+      expect(find.text(const ReceiptAccessDenied().message), findsOneWidget);
+      expect(find.text('Attach receipt photo'), findsOneWidget);
+    });
+
+    testWidgets('a photo that could not be kept is reported after saving', (
+      tester,
+    ) async {
+      await tester.binding.setSurfaceSize(const Size(400, 800));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      receipts.keepResult = const Err(ConnectionUnavailable());
+      cubit = RecordPurchaseCubit(
+        purchases: purchases,
+        items: items,
+        members: members,
+        shoppingList: FakeShoppingListRepository(),
+        receiptPicker: receiptPicker,
+        receipts: receipts,
+        currentUser: testUser,
+        now: () => _now,
+      );
+      addTearDown(cubit.close);
+      // Pushed over a screen of its own, so the message has somewhere to
+      // show once the review screen closes.
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: Builder(
+              builder: (context) => TextButton(
+                onPressed: () => Navigator.of(context).push(
+                  MaterialPageRoute<void>(
+                    builder: (_) => BlocProvider.value(
+                      value: cubit,
+                      child: const RecordPurchaseView(),
+                    ),
+                  ),
+                ),
+                child: const Text('open'),
+              ),
+            ),
+          ),
+        ),
+      );
+      // The screen spins until both collections report, so it never settles
+      // before they do.
+      await tester.tap(find.text('open'));
+      await tester.pump();
+      await tester.pump(const Duration(seconds: 1));
+      items.emitItems(const []);
+      members.emitMembers(const []);
+      await tester.pumpAndSettle();
+      await fillHeader(tester);
+      await attachFrom(tester, 'Take photo');
+
+      await _tap(tester, find.widgetWithText(FilledButton, 'Save purchase'));
+
+      expect(find.byType(RecordPurchaseView), findsNothing);
+      expect(
+        find.text(
+          'Saved without the photo. ${const ConnectionUnavailable().message}',
+        ),
+        findsOneWidget,
+      );
     });
   });
 }

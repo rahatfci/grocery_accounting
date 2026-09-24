@@ -3,6 +3,7 @@ import 'package:equatable/equatable.dart';
 import '../../items/logic/item.dart';
 import '../../items/logic/item_unit.dart';
 import '../../items/logic/item_validation.dart';
+import '../../receipts/logic/receipt.dart';
 import 'purchase.dart';
 import 'purchase_source.dart';
 import 'quantity_conversion.dart';
@@ -37,6 +38,8 @@ final class PurchaseDraftLine extends Equatable {
   List<Object?> get props => [item, quantity, unit, lineTotal];
 }
 
+const Object _unchanged = Object();
+
 /// A purchase being filled in, before anything has been written.
 final class PurchaseDraft extends Equatable {
   const PurchaseDraft({
@@ -45,6 +48,7 @@ final class PurchaseDraft extends Equatable {
     required this.totalText,
     required this.paidByUserId,
     required this.lines,
+    this.receipt,
   });
 
   /// A fresh draft: today's date, the signed-in member as payer, nothing else.
@@ -69,6 +73,9 @@ final class PurchaseDraft extends Equatable {
   final String paidByUserId;
   final List<PurchaseDraftLine> lines;
 
+  /// The scontrino photo, or null. Compared by identity: see [ReceiptPhoto].
+  final ReceiptPhoto? receipt;
+
   /// The sum of the line totals, which the screen shows beside the receipt
   /// total. They are allowed to differ: discounts, deposits and unpriced lines
   /// are all normal, and the receipt total is what reports use.
@@ -78,9 +85,13 @@ final class PurchaseDraft extends Equatable {
   ///
   /// [resolveItemId] supplies each line's item id: the existing one, or the id
   /// the commit generated for an item created inline.
+  ///
+  /// [receiptImagePath] is where the photo will be stored, or null when there
+  /// is none or it could not be kept.
   Purchase toPurchase({
     required String? Function(Item item) resolveItemId,
     String id = '',
+    String? receiptImagePath,
   }) => Purchase(
     id: id,
     // The day, not the moment. A blank draft starts from the clock, and a
@@ -90,7 +101,7 @@ final class PurchaseDraft extends Equatable {
     // Validation is what stops an unparseable total ever reaching a document.
     total: parseDecimal(totalText) ?? 0,
     paidByUserId: paidByUserId,
-    receiptImagePath: null,
+    receiptImagePath: receiptImagePath,
     source: PurchaseSource.manual,
     lines: [
       for (final line in lines)
@@ -110,16 +121,28 @@ final class PurchaseDraft extends Equatable {
     String? totalText,
     String? paidByUserId,
     List<PurchaseDraftLine>? lines,
+    Object? receipt = _unchanged,
   }) => PurchaseDraft(
     date: date ?? this.date,
     shopName: shopName ?? this.shopName,
     totalText: totalText ?? this.totalText,
     paidByUserId: paidByUserId ?? this.paidByUserId,
     lines: lines ?? this.lines,
+    // The sentinel keeps "leave it alone" distinct from "remove the photo".
+    receipt: identical(receipt, _unchanged)
+        ? this.receipt
+        : receipt as ReceiptPhoto?,
   );
 
   @override
-  List<Object?> get props => [date, shopName, totalText, paidByUserId, lines];
+  List<Object?> get props => [
+    date,
+    shopName,
+    totalText,
+    paidByUserId,
+    lines,
+    receipt,
+  ];
 }
 
 /// One item to restock, with everything bought of it on this purchase.

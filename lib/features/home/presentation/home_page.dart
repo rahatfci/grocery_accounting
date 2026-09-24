@@ -6,6 +6,9 @@ import '../../auth/presentation/auth_cubit.dart';
 import '../../items/data/item_repository.dart';
 import '../../items/presentation/item_list_page.dart';
 import '../../purchases/presentation/record_purchase_page.dart';
+import '../../receipts/data/receipt_store.dart';
+import '../../receipts/presentation/receipt_source_sheet.dart';
+import '../../receipts/presentation/receipt_uploads_cubit.dart';
 import '../../reminders/data/run_out_notifier.dart';
 import '../../reminders/presentation/run_out_reminders_cubit.dart';
 import '../../reports/presentation/reports_page.dart';
@@ -15,9 +18,8 @@ import '../../shopping_list/presentation/shopping_list_section.dart';
 import 'running_low_cubit.dart';
 import 'running_low_section.dart';
 
-/// Home, owning the running low, run-out reminder and shopping list cubits for
-/// as long as someone is signed in.
-/// Receipt capture is added by its own feature.
+/// Home, owning the running low, run-out reminder, shopping list and receipt
+/// upload cubits for as long as someone is signed in.
 class HomePage extends StatelessWidget {
   const HomePage({required this.user, super.key});
 
@@ -38,6 +40,13 @@ class HomePage extends StatelessWidget {
             context.read<ItemRepository>(),
             context.read<RunOutNotifier>(),
           ),
+        ),
+        BlocProvider(
+          // Nothing reads its state either. Created at once so photos queued
+          // offline start uploading as soon as someone is signed in.
+          lazy: false,
+          create: (context) =>
+              ReceiptUploadsCubit(context.read<ReceiptStore>()),
         ),
         BlocProvider(
           create: (context) => ShoppingListCubit(
@@ -106,9 +115,10 @@ class HomeView extends StatelessWidget {
                           textAlign: TextAlign.center,
                         ),
                         const SizedBox(height: 24),
-                        // The one action Home is built around. Receipt capture
-                        // joins it in feature 9.
-                        FilledButton.icon(
+                        // The one action Home is built around.
+                        _CaptureButton(user: user),
+                        const SizedBox(height: 12),
+                        OutlinedButton.icon(
                           onPressed: () => Navigator.of(context).push(
                             MaterialPageRoute<void>(
                               builder: (_) => RecordPurchasePage(user: user),
@@ -116,12 +126,6 @@ class HomeView extends StatelessWidget {
                           ),
                           icon: const Icon(Icons.receipt_long_outlined),
                           label: const Text('Record a purchase'),
-                          style: FilledButton.styleFrom(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 24,
-                              vertical: 20,
-                            ),
-                          ),
                         ),
                       ],
                     ),
@@ -144,8 +148,41 @@ class HomeView extends StatelessWidget {
   }
 }
 
-/// Re-judges running low and the run-out reminders when the app comes back to
-/// the foreground.
+/// Photograph or pick the scontrino, then review it as a purchase.
+class _CaptureButton extends StatelessWidget {
+  const _CaptureButton({required this.user});
+
+  final AppUser user;
+
+  Future<void> _capture(BuildContext context) async {
+    final navigator = Navigator.of(context);
+    final source = await showReceiptSourceSheet(context);
+    if (source == null) {
+      return;
+    }
+    await navigator.push(
+      MaterialPageRoute<void>(
+        builder: (_) => RecordPurchasePage(user: user, startWith: source),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return FilledButton.icon(
+      onPressed: () => _capture(context),
+      icon: const Icon(Icons.photo_camera_outlined, size: 28),
+      label: const Text('Capture receipt'),
+      style: FilledButton.styleFrom(
+        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 28),
+        textStyle: Theme.of(context).textTheme.titleMedium,
+      ),
+    );
+  }
+}
+
+/// Re-judges running low and the run-out reminders, and retries queued
+/// receipt uploads, when the app comes back to the foreground.
 ///
 /// Home stays mounted all day, and staples run down with no write to `items`,
 /// so without this a phone left on Home overnight shows yesterday's list.
@@ -168,6 +205,7 @@ class _RefreshOnResumeState extends State<_RefreshOnResume> {
       onResume: () {
         context.read<RunningLowCubit>().refresh();
         context.read<RunOutRemindersCubit>().refresh();
+        context.read<ReceiptUploadsCubit>().flush();
       },
     );
   }

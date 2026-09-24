@@ -59,7 +59,13 @@ sealed class CommitOutcome extends Equatable {
 }
 
 final class CommitSucceeded extends CommitOutcome {
-  const CommitSucceeded();
+  const CommitSucceeded({this.receiptSkipped});
+
+  /// Why the photo was not kept, when the purchase was saved without it.
+  final DataFailure? receiptSkipped;
+
+  @override
+  List<Object?> get props => [receiptSkipped];
 }
 
 /// The draft is not ready to be written. [message] is what to tell the member.
@@ -79,4 +85,31 @@ final class CommitFailed extends CommitOutcome {
 
   @override
   List<Object?> get props => [failure];
+}
+
+/// What asking for a receipt photo did.
+sealed class ReceiptPickOutcome extends Equatable {
+  const ReceiptPickOutcome();
+
+  @override
+  List<Object?> get props => const [];
+}
+
+/// A photo was picked and is now attached to the draft.
+final class ReceiptPicked extends ReceiptPickOutcome {
+  const ReceiptPicked();
+}
+
+final class ReceiptPickCancelled extends ReceiptPickOutcome {
+  const ReceiptPickCancelled();
+}
+
+/// Nothing was picked. [message] is what to tell the member.
+final class ReceiptPickRefused extends ReceiptPickOutcome {
+  const ReceiptPickRefused(this.message);
+
+  final String message;
+
+  @override
+  List<Object?> get props => [message];
 }

@@ -23,11 +23,21 @@ abstract interface class PurchaseRepository {
   /// [clearEntryIds] are the shopping list entries this purchase covers. They
   /// are deleted in the same batch, so the list cannot be cleared by a
   /// purchase that was never written.
+  ///
+  /// [purchaseId] is the document id to write, from [newPurchaseId], so the
+  /// receipt photo can be stored under it before the purchase exists. A new
+  /// id is generated when it is null. [receiptImagePath] is written as is.
   Future<Result<void, DataFailure>> commit(
     PurchaseDraft draft, {
     required DateTime now,
     Set<String> clearEntryIds = const {},
+    String? purchaseId,
+    String? receiptImagePath,
   });
+
+  /// A fresh purchase document id, generated on the device so it works
+  /// offline.
+  String newPurchaseId();
 
   /// Every purchase in a half-open window, oldest first, refreshed as the
   /// collection changes.

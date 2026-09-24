@@ -59,6 +59,11 @@ class FakePurchaseRepository implements PurchaseRepository {
   final committed = <PurchaseDraft>[];
   final commitClocks = <DateTime>[];
   final clearedEntryIds = <Set<String>>[];
+  final commitIds = <String?>[];
+  final receiptPaths = <String?>[];
+
+  /// The ids `newPurchaseId` hands out, in order.
+  int _nextId = 0;
   final referenceChecks = <String>[];
 
   Result<void, DataFailure> commitResult = const Ok(null);
@@ -98,10 +103,14 @@ class FakePurchaseRepository implements PurchaseRepository {
     PurchaseDraft draft, {
     required DateTime now,
     Set<String> clearEntryIds = const {},
+    String? purchaseId,
+    String? receiptImagePath,
   }) async {
     committed.add(draft);
     commitClocks.add(now);
     clearedEntryIds.add(clearEntryIds);
+    commitIds.add(purchaseId);
+    receiptPaths.add(receiptImagePath);
     await writeGate?.future;
     final thrown = commitThrows;
     if (thrown != null) {
@@ -109,6 +118,9 @@ class FakePurchaseRepository implements PurchaseRepository {
     }
     return commitResult;
   }
+
+  @override
+  String newPurchaseId() => 'new${++_nextId}';
 
   @override
   Future<Result<bool, DataFailure>> isItemReferenced(String itemId) async {

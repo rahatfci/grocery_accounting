@@ -128,7 +128,7 @@ own, so there is no suggestion state to clean up.
 | Framework | Flutter 3.44.4, Dart 3.12.2 |
 | State | `flutter_bloc` |
 | Dependency injection | `get_it` with `injectable` |
-| Backend | Firebase: Auth, Firestore, Storage |
+| Backend | Firebase: Auth, Firestore. Supabase Storage for receipt photos |
 | OCR | `google_mlkit_text_recognition`, on device, Android and iOS only |
 | Result type | Dart 3 sealed classes, not `dartz`, which is unmaintained |
 | Equality | `equatable`, adding `freezed` only if codegen earns its place |
@@ -180,7 +180,7 @@ Cloud Functions, and therefore the Firebase Blaze plan, and therefore any cloud
 AI extraction. On device only. This costs accuracy, especially on handwritten
 receipts from an alimentari or frutteria, and it means parser rules need tuning
 per chain. It buys zero cost, no payment method, offline capture and no receipt
-image leaving the device except into the household's own Storage bucket.
+image leaving the device except into the household's own storage bucket.
 
 ## 6. Monetize - How will this make money?
 
@@ -222,16 +222,24 @@ No public store distribution. Five known users.
 | Android | `flutter build appbundle` or APK, internal distribution |
 | iOS | TestFlight internal testers, or direct install |
 
-Firebase project holds Auth, Firestore and Storage. Spark plan is sufficient,
-since there are no Cloud Functions. No environment variables beyond the
-generated `firebase_options.dart`. No workers, no cron jobs, no health check, no
-custom domain.
+Firebase project holds Auth and Firestore. Spark plan is sufficient, since
+there are no Cloud Functions. Receipt photos live in a Supabase Storage bucket
+(`Grocery Accounting`), because Firebase Storage needs the Blaze plan on this
+project (decided 2026-09-24). No environment variables beyond the generated
+`firebase_options.dart` and the Supabase URL and publishable key, both of which
+ship in the app. No workers, no cron jobs, no health check, no custom domain.
 
-**Firestore and Storage security rules are required, not optional.** The
-database sits on the public internet whatever the app does. Rules restrict all
-reads and writes to authenticated users. That is the whole boundary. No roles,
-no per user ownership rules, no field level validation beyond what stops an
-accident, because all five users are trusted and share the same data by design.
+**Firestore security rules are required, not optional.** The database sits on
+the public internet whatever the app does. Rules restrict all reads and writes
+to authenticated users. That is the whole boundary. No roles, no per user
+ownership rules, no field level validation beyond what stops an accident,
+because all five users are trusted and share the same data by design.
+
+**Receipt photos are the one exception, by decision (2026-09-24).** The app
+uploads with the Supabase publishable key, and a bucket policy allows it.
+Anyone who extracts that key from the app or the web build could upload to the
+bucket, and read it if the policy allows. Accepted for now, because receipts
+are low sensitivity and the users sign in with Firebase, not Supabase.
 
 ## 9. Usage model and constraints
 

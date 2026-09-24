@@ -8,6 +8,8 @@ import 'features/auth/presentation/auth_cubit.dart';
 import 'features/items/data/item_repository.dart';
 import 'features/members/data/member_repository.dart';
 import 'features/purchases/data/purchase_repository.dart';
+import 'features/receipts/data/receipt_picker.dart';
+import 'features/receipts/data/receipt_store.dart';
 import 'features/reminders/data/run_out_notifier.dart';
 import 'features/shopping_list/data/shopping_list_repository.dart';
 import 'firebase_options.dart';
@@ -32,6 +34,8 @@ Future<void> main() async {
       purchaseRepository: getIt<PurchaseRepository>(),
       runOutNotifier: getIt<RunOutNotifier>(),
       shoppingListRepository: getIt<ShoppingListRepository>(),
+      receiptPicker: getIt<ReceiptPicker>(),
+      receiptStore: getIt<ReceiptStore>(),
     ),
   );
 }

@@ -10,11 +10,14 @@ import 'package:grocery_accounting/features/home/presentation/home_page.dart';
 import 'package:grocery_accounting/features/items/data/item_repository.dart';
 import 'package:grocery_accounting/features/members/data/member_repository.dart';
 import 'package:grocery_accounting/features/reminders/data/run_out_notifier.dart';
+import 'package:grocery_accounting/features/receipts/data/receipt_picker.dart';
+import 'package:grocery_accounting/features/receipts/data/receipt_store.dart';
 import 'package:grocery_accounting/features/shopping_list/data/shopping_list_repository.dart';
 
 import '../../items/fake_item_repository.dart';
 import '../../members/fake_member_repository.dart';
 import '../../reminders/fake_run_out_notifier.dart';
+import '../../receipts/fake_receipts.dart';
 import '../../shopping_list/fake_shopping_list_repository.dart';
 import '../fake_auth_repository.dart';
 
@@ -37,6 +40,8 @@ Future<void> _pumpGate(
           RepositoryProvider<ShoppingListRepository>.value(
             value: FakeShoppingListRepository()..initialEntries = const [],
           ),
+          RepositoryProvider<ReceiptPicker>.value(value: FakeReceiptPicker()),
+          RepositoryProvider<ReceiptStore>.value(value: FakeReceiptStore()),
         ],
         child: BlocProvider(
           create: (_) => AuthCubit(repository),

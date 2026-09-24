@@ -34,6 +34,14 @@ import 'package:grocery_accounting/features/purchases/data/firestore_purchase_re
     as _i716;
 import 'package:grocery_accounting/features/purchases/data/purchase_repository.dart'
     as _i384;
+import 'package:grocery_accounting/features/receipts/data/image_picker_receipt_picker.dart'
+    as _i179;
+import 'package:grocery_accounting/features/receipts/data/receipt_picker.dart'
+    as _i472;
+import 'package:grocery_accounting/features/receipts/data/receipt_store.dart'
+    as _i88;
+import 'package:grocery_accounting/features/receipts/data/supabase_receipt_store.dart'
+    as _i125;
 import 'package:grocery_accounting/features/reminders/data/local_run_out_notifier.dart'
     as _i360;
 import 'package:grocery_accounting/features/reminders/data/run_out_notifier.dart'
@@ -42,6 +50,8 @@ import 'package:grocery_accounting/features/shopping_list/data/firestore_shoppin
     as _i575;
 import 'package:grocery_accounting/features/shopping_list/data/shopping_list_repository.dart'
     as _i285;
+import 'package:http/http.dart' as _i519;
+import 'package:image_picker/image_picker.dart' as _i183;
 import 'package:injectable/injectable.dart' as _i526;
 
 extension GetItInjectableX on _i174.GetIt {
@@ -52,9 +62,12 @@ extension GetItInjectableX on _i174.GetIt {
   }) {
     final gh = _i526.GetItHelper(this, environment, environmentFilter);
     final firebaseModule = _$FirebaseModule();
+    final receiptsModule = _$ReceiptsModule();
     final notificationsModule = _$NotificationsModule();
     gh.lazySingleton<_i59.FirebaseAuth>(() => firebaseModule.firebaseAuth);
     gh.lazySingleton<_i974.FirebaseFirestore>(() => firebaseModule.firestore);
+    gh.lazySingleton<_i183.ImagePicker>(() => receiptsModule.imagePicker);
+    gh.lazySingleton<_i519.Client>(() => receiptsModule.httpClient);
     gh.lazySingleton<_i163.FlutterLocalNotificationsPlugin>(
       () => notificationsModule.notifications,
     );
@@ -67,6 +80,9 @@ extension GetItInjectableX on _i174.GetIt {
         gh<_i163.FlutterLocalNotificationsPlugin>(),
       ),
     );
+    gh.lazySingleton<_i472.ReceiptPicker>(
+      () => _i179.ImagePickerReceiptPicker(gh<_i183.ImagePicker>()),
+    );
     gh.lazySingleton<_i384.PurchaseRepository>(
       () => _i716.FirestorePurchaseRepository(gh<_i974.FirebaseFirestore>()),
     );
@@ -75,6 +91,9 @@ extension GetItInjectableX on _i174.GetIt {
     );
     gh.lazySingleton<_i726.MemberRepository>(
       () => _i807.FirestoreMemberRepository(gh<_i974.FirebaseFirestore>()),
+    );
+    gh.lazySingleton<_i88.ReceiptStore>(
+      () => _i125.SupabaseReceiptStore(gh<_i519.Client>()),
     );
     gh.lazySingleton<_i123.AuthRepository>(
       () => _i883.FirebaseAuthRepository(gh<_i59.FirebaseAuth>()),
@@ -87,5 +106,7 @@ extension GetItInjectableX on _i174.GetIt {
 }
 
 class _$FirebaseModule extends _i368.FirebaseModule {}
+
+class _$ReceiptsModule extends _i368.ReceiptsModule {}
 
 class _$NotificationsModule extends _i368.NotificationsModule {}

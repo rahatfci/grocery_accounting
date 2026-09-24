@@ -1,6 +1,6 @@
 # Grocery Accounting - Project Overview
 
-<!-- blueprint:source-hash 1f1c6dd9e330341b21af2b5169d50eb402d23e4ed3ecc87c15134b34e423adc4 -->
+<!-- blueprint:source-hash 1c1d9c9858f3b932b351775305cda8b1bef6992c8ea8124af87c94fab9a30f9e -->
 
 > A Flutter app for one five person household: photograph the scontrino, and the
 > spend, the payer, the pantry and the shopping list all update from that one
@@ -30,8 +30,9 @@ everything.
 - Around five users, known and trusted, accounts created by hand
 - One household, one shared dataset, no tenancy
 - Firebase is internet facing, so authentication is a real boundary: Firestore
-  and Storage rules restrict all access to signed-in users. No roles, no per user
-  ownership rules
+  rules restrict all access to signed-in users. No roles, no per user ownership
+  rules. Receipt photos in Supabase Storage are the accepted exception: they are
+  uploaded with the publishable key under a bucket policy
 - Offline capture matters. Firestore persistence on, receipt photos queue
 - EUR only. Costs split equally, so each user owes `total / 5`
 - Shops in scope: In's, Conad, Lidl, independent alimentari, frutteria
@@ -109,7 +110,7 @@ needed apart.
 - `shopName` (string)
 - `total` (double, EUR)
 - `paidByUserId` (string) -> `users/{userId}`
-- `receiptImagePath` (string, nullable) -> Firebase Storage
+- `receiptImagePath` (string, nullable) -> object path in the Supabase `Grocery Accounting` bucket
 - `source` (enum: `manual` | `scanned`)
 - `lines` (array of PurchaseLine, embedded)
 
@@ -173,7 +174,8 @@ there is no suggestion state to clean up.
 - **get_it with injectable** - dependency injection through constructors
 - **Firebase Auth** - sign in for hand-created accounts
 - **Cloud Firestore** - all six collections, offline persistence on
-- **Firebase Storage** - scontrino images
+- **Supabase Storage** - scontrino images, uploaded over its REST API with `http`,
+  because Firebase Storage needs the Blaze plan here
 - **google_mlkit_text_recognition** - on device OCR, Android and iOS only
 - **Dart 3 sealed classes** - `Result` and bloc states, not `dartz`
 - **equatable** - value equality; `freezed` only if the codegen earns its place
@@ -228,11 +230,13 @@ sufficient, since there are no Cloud Functions.
 | Android | `flutter build appbundle` or APK, internal distribution |
 | iOS | TestFlight internal testers, or direct install |
 
-- Firebase project holds Auth, Firestore and Storage
-- Env vars: none beyond the generated `firebase_options.dart`
+- Firebase project holds Auth and Firestore; Supabase holds receipt photos
+- Env vars: none beyond the generated `firebase_options.dart` and the Supabase
+  URL and publishable key, which ship in the app
 - No workers, no cron jobs, no health check path, no custom domain
-- Firestore and Storage rules are required, not optional, restricting all reads
-  and writes to authenticated users
+- Firestore rules are required, not optional, restricting all reads and writes
+  to authenticated users. The Supabase bucket is governed by its storage
+  policies instead
 
 ## Open questions
 

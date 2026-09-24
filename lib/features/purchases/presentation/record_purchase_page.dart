@@ -1,15 +1,18 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
-import '../../../core/refusal_window.dart';
 import '../../../core/widgets/failure_message.dart';
 import '../../auth/logic/app_user.dart';
 import '../../items/data/item_repository.dart';
 import '../../items/logic/item.dart';
 import '../../items/logic/item_validation.dart';
 import '../../members/data/member_repository.dart';
-import '../../shopping_list/data/shopping_list_repository.dart';
 import '../../members/logic/household_member.dart';
+import '../../receipts/data/receipt_picker.dart';
+import '../../receipts/data/receipt_store.dart';
+import '../../receipts/logic/receipt.dart';
+import '../../receipts/presentation/receipt_source_sheet.dart';
+import '../../shopping_list/data/shopping_list_repository.dart';
 import '../data/purchase_repository.dart';
 import '../logic/money.dart';
 import '../logic/purchase_draft.dart';
@@ -24,9 +27,13 @@ const _earliestPurchaseYears = 2;
 
 /// The review and commit screen, and the one action Home is built around.
 class RecordPurchasePage extends StatelessWidget {
-  const RecordPurchasePage({required this.user, super.key});
+  const RecordPurchasePage({required this.user, this.startWith, super.key});
 
   final AppUser user;
+
+  /// When set, the screen opens by picking a receipt photo from here, which
+  /// is how capture on Home arrives.
+  final ReceiptSource? startWith;
 
   @override
   Widget build(BuildContext context) {
@@ -36,9 +43,17 @@ class RecordPurchasePage extends StatelessWidget {
         items: context.read<ItemRepository>(),
         members: context.read<MemberRepository>(),
         shoppingList: context.read<ShoppingListRepository>(),
+        receiptPicker: context.read<ReceiptPicker>(),
+        receipts: context.read<ReceiptStore>(),
         currentUser: user,
       ),
-      child: const RecordPurchaseView(),
+      child: switch (startWith) {
+        final source? => _PickOnOpen(
+          source: source,
+          child: const RecordPurchaseView(),
+        ),
+        null => const RecordPurchaseView(),
+      },
     );
   }
 }
@@ -68,6 +83,49 @@ class RecordPurchaseView extends StatelessWidget {
       ),
     );
   }
+}
+
+/// Picks the receipt as soon as the screen is up. A capture that was
+/// cancelled or refused goes back to Home, since there is nothing to review.
+class _PickOnOpen extends StatefulWidget {
+  const _PickOnOpen({required this.source, required this.child});
+
+  final ReceiptSource source;
+  final Widget child;
+
+  @override
+  State<_PickOnOpen> createState() => _PickOnOpenState();
+}
+
+class _PickOnOpenState extends State<_PickOnOpen> {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _pick());
+  }
+
+  Future<void> _pick() async {
+    final cubit = context.read<RecordPurchaseCubit>();
+    final navigator = Navigator.of(context);
+    final messenger = ScaffoldMessenger.of(context);
+
+    final outcome = await cubit.pickReceipt(widget.source);
+    if (!mounted) {
+      return;
+    }
+    switch (outcome) {
+      case ReceiptPicked():
+        break;
+      case ReceiptPickCancelled():
+        navigator.pop();
+      case ReceiptPickRefused(:final message):
+        navigator.pop();
+        messenger.showSnackBar(SnackBar(content: Text(message)));
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) => widget.child;
 }
 
 class _LoadFailure extends StatelessWidget {
@@ -197,6 +255,20 @@ class _PurchaseFormState extends State<_PurchaseForm> {
     _onFieldChanged();
   }
 
+  Future<void> _attachReceipt() async {
+    final cubit = context.read<RecordPurchaseCubit>();
+    final messenger = ScaffoldMessenger.of(context);
+
+    final source = await showReceiptSourceSheet(context);
+    if (source == null) {
+      return;
+    }
+    final outcome = await cubit.pickReceipt(source);
+    if (outcome case ReceiptPickRefused(:final message)) {
+      messenger.showSnackBar(SnackBar(content: Text(message)));
+    }
+  }
+
   Future<void> _save() async {
     final form = _formKey.currentState;
     if (form == null || !form.validate()) {
@@ -206,22 +278,29 @@ class _PurchaseFormState extends State<_PurchaseForm> {
 
     final cubit = context.read<RecordPurchaseCubit>();
     final navigator = Navigator.of(context);
+    final messenger = ScaffoldMessenger.of(context);
     setState(() {
       _saving = true;
       _failure = null;
     });
 
-    final outcome = await cubit.commit().timeout(
-      refusalWindow,
-      onTimeout: () => const CommitSucceeded(),
-    );
+    final outcome = await cubit.commit();
 
     if (!mounted) {
       return;
     }
     switch (outcome) {
-      case CommitSucceeded():
+      case CommitSucceeded(:final receiptSkipped):
         navigator.pop();
+        if (receiptSkipped != null) {
+          messenger.showSnackBar(
+            SnackBar(
+              content: Text(
+                'Saved without the photo. ${receiptSkipped.message}',
+              ),
+            ),
+          );
+        }
       case CommitInvalid(:final message):
         setState(() {
           _saving = false;
@@ -319,6 +398,12 @@ class _PurchaseFormState extends State<_PurchaseForm> {
                       },
               ),
               const SizedBox(height: 24),
+              _ReceiptSection(
+                receipt: draft.receipt,
+                onAttach: _saving ? null : _attachReceipt,
+                onRemove: _saving ? null : cubit.removeReceipt,
+              ),
+              const SizedBox(height: 24),
               Row(
                 children: [
                   Expanded(
@@ -364,6 +449,81 @@ class _PurchaseFormState extends State<_PurchaseForm> {
           ),
         ),
       ),
+    );
+  }
+}
+
+class _ReceiptSection extends StatelessWidget {
+  const _ReceiptSection({
+    required this.receipt,
+    required this.onAttach,
+    required this.onRemove,
+  });
+
+  final ReceiptPhoto? receipt;
+  final VoidCallback? onAttach;
+  final VoidCallback? onRemove;
+
+  @override
+  Widget build(BuildContext context) {
+    final photo = receipt;
+    if (photo == null) {
+      return Align(
+        alignment: AlignmentDirectional.centerStart,
+        child: OutlinedButton.icon(
+          onPressed: onAttach,
+          icon: const Icon(Icons.add_a_photo_outlined),
+          label: const Text('Attach receipt photo'),
+        ),
+      );
+    }
+
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        ClipRRect(
+          borderRadius: BorderRadius.circular(8),
+          child: Image.memory(
+            photo.bytes,
+            height: 120,
+            width: 90,
+            fit: BoxFit.cover,
+            // Decoded at thumbnail size, not the full 2000px photo.
+            cacheHeight: 360,
+            semanticLabel: 'Receipt photo',
+            gaplessPlayback: true,
+            // A photo that will not decode still shows that one is attached.
+            errorBuilder: (_, _, _) => const SizedBox(
+              height: 120,
+              width: 90,
+              child: Icon(Icons.broken_image_outlined),
+            ),
+          ),
+        ),
+        const SizedBox(width: 16),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Receipt photo',
+                style: Theme.of(context).textTheme.titleMedium,
+              ),
+              const SizedBox(height: 8),
+              TextButton.icon(
+                onPressed: onAttach,
+                icon: const Icon(Icons.refresh),
+                label: const Text('Replace'),
+              ),
+              TextButton.icon(
+                onPressed: onRemove,
+                icon: const Icon(Icons.delete_outline),
+                label: const Text('Remove'),
+              ),
+            ],
+          ),
+        ),
+      ],
     );
   }
 }

@@ -139,9 +139,10 @@ fixed at review rather than paid for up front on every step.
 - **The Firebase plugins apply the Kotlin Gradle Plugin, which Flutter is
   removing support for.** Every Android build prints: "Your app uses the
   following plugins that apply Kotlin Gradle Plugin (KGP): firebase_auth,
-  firebase_core, firebase_storage. Future versions of Flutter will fail to build
-  if your app uses plugins that apply KGP." Builds are fine today. This is a
-  future hard failure on three packages the whole project depends on, and it is
+  firebase_core. Future versions of Flutter will fail to build if your app uses
+  plugins that apply KGP." (`firebase_storage` was in that list until receipts
+  moved to Supabase.) Builds are fine today. This is a future hard failure on
+  packages the whole project depends on, and it is
   fixed by the plugin authors, not here. Watch their changelogs before upgrading
   Flutter.
 - **ML Kit has no arm64 simulator slices, so iOS simulators are unusable on

@@ -7,6 +7,8 @@ import 'features/auth/presentation/auth_gate.dart';
 import 'features/items/data/item_repository.dart';
 import 'features/members/data/member_repository.dart';
 import 'features/purchases/data/purchase_repository.dart';
+import 'features/receipts/data/receipt_picker.dart';
+import 'features/receipts/data/receipt_store.dart';
 import 'features/reminders/data/run_out_notifier.dart';
 import 'features/shopping_list/data/shopping_list_repository.dart';
 
@@ -18,6 +20,8 @@ class GroceryAccountingApp extends StatelessWidget {
     required this.purchaseRepository,
     required this.runOutNotifier,
     required this.shoppingListRepository,
+    required this.receiptPicker,
+    required this.receiptStore,
     super.key,
   });
 
@@ -44,6 +48,12 @@ class GroceryAccountingApp extends StatelessWidget {
   /// purchase screen clears what a purchase covers.
   final ShoppingListRepository shoppingListRepository;
 
+  /// Resolved in `main` as well. The purchase screen picks receipt photos
+  /// through the picker and keeps them through the store; Home flushes the
+  /// store's upload queue.
+  final ReceiptPicker receiptPicker;
+  final ReceiptStore receiptStore;
+
   @override
   Widget build(BuildContext context) {
     return MultiRepositoryProvider(
@@ -53,6 +63,8 @@ class GroceryAccountingApp extends StatelessWidget {
         RepositoryProvider.value(value: purchaseRepository),
         RepositoryProvider.value(value: runOutNotifier),
         RepositoryProvider.value(value: shoppingListRepository),
+        RepositoryProvider.value(value: receiptPicker),
+        RepositoryProvider.value(value: receiptStore),
       ],
       child: BlocProvider(
         create: (_) => authCubit,

@@ -236,3 +236,45 @@ install a recording `BlocObserver` (as `shopping_list_cubit_test.dart:13-21`
 does) and expect `[const ConnectionUnavailable()]` to have been reported. No
 current requirement is lost.
 **Resolution:**
+
+### F-13 [P3] open - Receipt comments still describe Firebase Storage and overwriting uploads
+
+**File:** lib/features/receipts/data/receipt_store.dart:5-8
+**Found:** 2026-09-24 by /audit independent (scope: current; lens: quality)
+**Why it matters:** The `ReceiptStore` doc says photos go to "Firebase
+Storage" and that implementations "own every Firebase and file system type",
+but the only implementation is `SupabaseReceiptStore` over the Storage REST
+API. `receiptStoragePath` (lib/features/receipts/logic/receipt.dart:19-20)
+says a retried upload "overwrites itself", which contradicts the spec's Upload
+contract and `uploadReceiptToSupabase` (lib/features/receipts/data/supabase_receipt_store.dart:31-34):
+the upload never overwrites and a 409 counts as stored. A reader relying on the
+comment could add `x-upsert` or expect a replacement photo to land, which the
+bucket has no update policy for.
+**Suggested fix:** Reword both comments to Supabase Storage and to "an object
+already at this path is the same photo and counts as stored". Comments only; no
+current requirement is lost.
+**Resolution:**
+
+### F-14 [P3] open - A refused purchase can still leave an uploaded receipt object
+
+**File:** lib/features/receipts/data/supabase_receipt_store.dart:137-139
+**Found:** 2026-09-24 by /audit independent (scope: current; lens: quality, security)
+**Why it matters:** The spec's queue contract says `discard` runs "when the
+commit is refused, so a refused purchase never uploads a photo". On web,
+`keep` uploads before the commit starts and `discard` is a no-op
+(supabase_receipt_store.dart:156-158), so a refused commit leaves the object in
+the bucket, and each retry mints a new purchase id
+(lib/features/purchases/presentation/record_purchase_cubit.dart:147) and
+uploads another copy. On phones, a flush already iterating the queue (a
+previous commit's flush or Home's resume flush) can list and upload a file
+`keep` just renamed into place before that purchase's commit is refused, and
+`discard` then removes only the local copy. Nothing can delete objects with the
+publishable key, so these orphans are permanent. Impact is storage clutter and
+receipt images with no purchase, not data loss.
+**Suggested fix:** Needs a user decision for web, since uploading before the
+commit is the chosen web design: either record the web orphan as accepted in
+the spec, or upload after the commit on web too. For phones, have `keep` leave
+the file under a name `flush` ignores (for example the existing `.partial`
+form) and rename it to `{id}.img` only once the commit succeeds or passes the
+refusal window. No current requirement is lost.
+**Resolution:**

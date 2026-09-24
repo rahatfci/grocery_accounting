@@ -3,12 +3,16 @@ import 'dart:async';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../../core/data_failure.dart';
+import '../../../core/refusal_window.dart';
 import '../../../core/result.dart';
 import '../../auth/logic/app_user.dart';
 import '../../items/data/item_repository.dart';
 import '../../items/logic/item.dart';
 import '../../members/data/member_repository.dart';
 import '../../members/logic/household_member.dart';
+import '../../receipts/data/receipt_picker.dart';
+import '../../receipts/data/receipt_store.dart';
+import '../../receipts/logic/receipt.dart';
 import '../../shopping_list/data/shopping_list_repository.dart';
 import '../../shopping_list/logic/shopping_entry.dart';
 import '../../shopping_list/logic/shopping_match.dart';
@@ -18,13 +22,15 @@ import '../logic/purchase_validation.dart';
 import 'record_purchase_state.dart';
 
 /// Owns the purchase being filled in, the two collections the pickers need,
-/// and the shopping list a saved purchase clears.
+/// the shopping list a saved purchase clears, and the receipt photo.
 class RecordPurchaseCubit extends Cubit<RecordPurchaseState> {
   RecordPurchaseCubit({
     required this._purchases,
     required this._items,
     required this._members,
     required this._shoppingList,
+    required this._receiptPicker,
+    required this._receipts,
     required AppUser currentUser,
     DateTime Function() now = DateTime.now,
   }) : _currentUser = currentUser,
@@ -38,6 +44,8 @@ class RecordPurchaseCubit extends Cubit<RecordPurchaseState> {
   final ItemRepository _items;
   final MemberRepository _members;
   final ShoppingListRepository _shoppingList;
+  final ReceiptPicker _receiptPicker;
+  final ReceiptStore _receipts;
   final AppUser _currentUser;
 
   /// Injected so the date the draft starts on, the future check and the
@@ -86,6 +94,32 @@ class RecordPurchaseCubit extends Cubit<RecordPurchaseState> {
     _update(_draft.copyWith(lines: lines));
   }
 
+  void attachReceipt(ReceiptPhoto photo) =>
+      _update(_draft.copyWith(receipt: photo));
+
+  void removeReceipt() => _update(_draft.copyWith(receipt: null));
+
+  /// Asks the camera or gallery for a photo and attaches it, replacing any
+  /// photo already attached.
+  Future<ReceiptPickOutcome> pickReceipt(ReceiptSource source) async {
+    final result = await _receiptPicker.pick(source);
+    switch (result) {
+      case Ok(value: final photo?):
+        attachReceipt(photo);
+        return const ReceiptPicked();
+      case Ok():
+        return const ReceiptPickCancelled();
+      case Err(:final error):
+        if (error case ReceiptPickerUnavailable(
+          :final cause,
+          :final stackTrace,
+        )) {
+          addError(cause, stackTrace);
+        }
+        return ReceiptPickRefused(error.message);
+    }
+  }
+
   /// Subscribes again after a failure, keeping what has been typed so far.
   ///
   /// A snapshot stream is finished once it has errored, so recovering takes a
@@ -95,34 +129,83 @@ class RecordPurchaseCubit extends Cubit<RecordPurchaseState> {
     _subscribe();
   }
 
-  /// Writes the purchase and restocks everything on it.
+  /// Writes the purchase and restocks everything on it, keeping the receipt
+  /// photo first so the purchase can point at it.
   ///
-  /// The write completes only once the server acknowledges it, so the caller
-  /// must not block navigation on this future.
+  /// Offline the Firestore write only completes once the server acknowledges
+  /// it, so a commit still pending after [refusalWindow] counts as done: it is
+  /// already queued, and a refusal would have arrived by then. The window
+  /// covers the Firestore write only, not keeping the photo, which on web is
+  /// an upload.
   Future<CommitOutcome> commit() async {
     final invalid = validateDraft(_draft, today: _now());
     if (invalid != null) {
       return CommitInvalid(invalid);
     }
 
+    final draft = _draft;
+    final purchaseId = _purchases.newPurchaseId();
+    String? receiptPath;
+    DataFailure? receiptSkipped;
+
     try {
-      final result = await _purchases.commit(
-        _draft,
-        now: _now(),
-        clearEntryIds: entriesClearedBy(
-          _entries,
-          _draft.lines.map((line) => line.item),
-        ),
-      );
-      return switch (result) {
-        Ok() => const CommitSucceeded(),
-        Err(:final error) => CommitFailed(error),
-      };
+      if (draft.receipt case final photo?) {
+        switch (await _receipts.keep(purchaseId, photo)) {
+          case Ok():
+            receiptPath = receiptStoragePath(purchaseId);
+          case Err(:final error):
+            // The spend matters more than the photo, so the purchase is
+            // saved without it and the member is told.
+            receiptSkipped = error;
+        }
+      }
+
+      final result = await _purchases
+          .commit(
+            draft,
+            now: _now(),
+            clearEntryIds: entriesClearedBy(
+              _entries,
+              draft.lines.map((line) => line.item),
+            ),
+            purchaseId: purchaseId,
+            receiptImagePath: receiptPath,
+          )
+          .timeout(refusalWindow, onTimeout: () => const Ok(null));
+
+      switch (result) {
+        case Ok():
+          if (receiptPath != null) {
+            unawaited(_flushReceipts());
+          }
+          return CommitSucceeded(receiptSkipped: receiptSkipped);
+        case Err(:final error):
+          if (receiptPath != null) {
+            await _receipts.discard(purchaseId);
+          }
+          return CommitFailed(error);
+      }
     } catch (error, stackTrace) {
-      // The repository maps the Firebase codes it knows. Anything else still
-      // has to reach the member as a message rather than an unhandled error.
+      // The repository and store map the Firebase codes they know. Anything
+      // else still has to reach the member as a message rather than an
+      // unhandled error.
       addError(error, stackTrace);
+      if (receiptPath != null) {
+        await _receipts.discard(purchaseId);
+      }
       return const CommitFailed(UnexpectedDataFailure());
+    }
+  }
+
+  /// Starts the upload the purchase screen does not wait for. A failure
+  /// leaves the photo queued, and Home flushes again later.
+  Future<void> _flushReceipts() async {
+    try {
+      await _receipts.flush();
+    } catch (error, stackTrace) {
+      if (!isClosed) {
+        addError(error, stackTrace);
+      }
     }
   }
 

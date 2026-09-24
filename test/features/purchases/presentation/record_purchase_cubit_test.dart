@@ -1,3 +1,6 @@
+import 'dart:async';
+
+import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:grocery_accounting/core/data_failure.dart';
 import 'package:grocery_accounting/core/result.dart';
@@ -6,22 +9,39 @@ import 'package:grocery_accounting/features/items/logic/item_unit.dart';
 import 'package:grocery_accounting/features/purchases/logic/purchase_draft.dart';
 import 'package:grocery_accounting/features/purchases/presentation/record_purchase_cubit.dart';
 import 'package:grocery_accounting/features/purchases/presentation/record_purchase_state.dart';
+import 'package:grocery_accounting/features/receipts/data/receipt_picker.dart';
 
 import '../../auth/fake_auth_repository.dart';
 import '../../items/fake_item_repository.dart';
 import '../../members/fake_member_repository.dart';
+import '../../receipts/fake_receipts.dart';
 import '../../shopping_list/fake_shopping_list_repository.dart';
 import '../fake_purchase_repository.dart';
 
 final _now = DateTime(2026, 9, 21, 18, 30);
+
+/// Records what the cubit reports through `addError`.
+class _RecordingObserver extends BlocObserver {
+  final reported = <Object>[];
+
+  @override
+  void onError(BlocBase<dynamic> bloc, Object error, StackTrace stackTrace) {
+    reported.add(error);
+    super.onError(bloc, error, stackTrace);
+  }
+}
 
 void main() {
   late FakePurchaseRepository purchases;
   late FakeItemRepository items;
   late FakeMemberRepository members;
   late FakeShoppingListRepository shoppingList;
+  late FakeReceiptPicker receiptPicker;
+  late FakeReceiptStore receipts;
 
   setUp(() {
+    receiptPicker = FakeReceiptPicker();
+    receipts = FakeReceiptStore();
     purchases = FakePurchaseRepository();
     items = FakeItemRepository();
     members = FakeMemberRepository();
@@ -34,6 +54,8 @@ void main() {
       items: items,
       members: members,
       shoppingList: shoppingList,
+      receiptPicker: receiptPicker,
+      receipts: receipts,
       currentUser: testUser,
       now: () => _now,
     );
@@ -386,6 +408,8 @@ void main() {
       items: items,
       members: members,
       shoppingList: shoppingList,
+      receiptPicker: receiptPicker,
+      receipts: receipts,
       currentUser: testUser,
       now: () => _now,
     );
@@ -487,6 +511,172 @@ void main() {
       cubit.retry();
 
       expect(shoppingList.watchCalls, 2);
+    });
+  });
+
+  group('receipt photo', () {
+    Future<RecordPurchaseCubit> filledIn() async {
+      final cubit = await ready();
+      cubit.setShopName('Conad');
+      cubit.setTotalText('10');
+      return cubit;
+    }
+
+    test('a purchase with no photo keeps nothing and writes no path', () async {
+      final cubit = await filledIn();
+
+      expect(await cubit.commit(), const CommitSucceeded());
+      expect(receipts.kept, isEmpty);
+      expect(purchases.receiptPaths.single, isNull);
+      expect(purchases.commitIds.single, 'new1');
+      await pumpEventQueue();
+      expect(receipts.flushes, 0);
+    });
+
+    test('attach, replace and remove change the draft', () async {
+      final cubit = await filledIn();
+      final first = testPhoto(1);
+      final second = testPhoto(2);
+
+      cubit.attachReceipt(first);
+      expect(draftOf(cubit).receipt, same(first));
+
+      cubit.attachReceipt(second);
+      expect(draftOf(cubit).receipt, same(second));
+
+      cubit.removeReceipt();
+      expect(draftOf(cubit).receipt, isNull);
+    });
+
+    test('keeps the photo under the purchase id, commits its path, then '
+        'uploads', () async {
+      final cubit = await filledIn();
+      final photo = testPhoto();
+      cubit.attachReceipt(photo);
+
+      expect(await cubit.commit(), const CommitSucceeded());
+      expect(receipts.kept.single.purchaseId, 'new1');
+      expect(receipts.kept.single.photo, same(photo));
+      expect(purchases.commitIds.single, 'new1');
+      expect(purchases.receiptPaths.single, 'receipts/new1');
+      await pumpEventQueue();
+      expect(receipts.flushes, 1);
+    });
+
+    test('a photo that cannot be kept saves without it and says why', () async {
+      final cubit = await filledIn();
+      cubit.attachReceipt(testPhoto());
+      receipts.keepResult = const Err(ConnectionUnavailable());
+
+      expect(
+        await cubit.commit(),
+        const CommitSucceeded(receiptSkipped: ConnectionUnavailable()),
+      );
+      expect(purchases.receiptPaths.single, isNull);
+      expect(receipts.discarded, isEmpty);
+    });
+
+    test('a refused purchase discards its kept photo', () async {
+      final cubit = await filledIn();
+      cubit.attachReceipt(testPhoto());
+      purchases.commitResult = const Err(PermissionDenied());
+
+      expect(await cubit.commit(), const CommitFailed(PermissionDenied()));
+      expect(receipts.discarded, ['new1']);
+      await pumpEventQueue();
+      expect(receipts.flushes, 0);
+    });
+
+    test('a thrown commit discards the photo and is reported', () async {
+      final cubit = await filledIn();
+      cubit.attachReceipt(testPhoto());
+      purchases.commitThrows = StateError('boom');
+
+      expect(await cubit.commit(), const CommitFailed(UnexpectedDataFailure()));
+      expect(receipts.discarded, ['new1']);
+    });
+
+    test('a commit still pending after the window counts as saved', () async {
+      final cubit = await filledIn();
+      cubit.attachReceipt(testPhoto());
+      purchases.writeGate = Completer<void>();
+
+      expect(await cubit.commit(), const CommitSucceeded());
+      await pumpEventQueue();
+      expect(receipts.flushes, 1);
+
+      purchases.writeGate?.complete();
+    });
+
+    test('a failed upload after saving is reported, not thrown', () async {
+      final observer = _RecordingObserver();
+      Bloc.observer = observer;
+      addTearDown(() => Bloc.observer = _RecordingObserver());
+      final cubit = await filledIn();
+      cubit.attachReceipt(testPhoto());
+      final thrown = StateError('disk');
+      receipts.flushThrows = thrown;
+
+      expect(await cubit.commit(), const CommitSucceeded());
+      await pumpEventQueue();
+      expect(receipts.flushes, 1);
+      expect(observer.reported, [thrown]);
+    });
+  });
+
+  group('picking a receipt', () {
+    test('attaches the picked photo', () async {
+      final cubit = await ready();
+      final photo = testPhoto(3);
+      receiptPicker.result = Ok(photo);
+
+      expect(
+        await cubit.pickReceipt(ReceiptSource.camera),
+        const ReceiptPicked(),
+      );
+      expect(receiptPicker.sources, [ReceiptSource.camera]);
+      expect(draftOf(cubit).receipt, same(photo));
+    });
+
+    test('a cancel changes nothing', () async {
+      final cubit = await ready();
+      receiptPicker.result = const Ok(null);
+
+      expect(
+        await cubit.pickReceipt(ReceiptSource.gallery),
+        const ReceiptPickCancelled(),
+      );
+      expect(draftOf(cubit).receipt, isNull);
+    });
+
+    test('a denied permission is refused with its message', () async {
+      final cubit = await ready();
+      receiptPicker.result = const Err(ReceiptAccessDenied());
+
+      expect(
+        await cubit.pickReceipt(ReceiptSource.camera),
+        ReceiptPickRefused(const ReceiptAccessDenied().message),
+      );
+    });
+
+    test('an unexpected picker failure is refused and reported', () async {
+      final observer = _RecordingObserver();
+      Bloc.observer = observer;
+      addTearDown(() => Bloc.observer = _RecordingObserver());
+      final cubit = await ready();
+      final cause = StateError('boom');
+      receiptPicker.result = Err(
+        ReceiptPickerUnavailable(cause, StackTrace.empty),
+      );
+
+      final outcome = await cubit.pickReceipt(ReceiptSource.camera);
+
+      expect(observer.reported, [cause]);
+
+      expect(
+        outcome,
+        const ReceiptPickRefused('Could not open the camera or gallery'),
+      );
     });
   });
 }

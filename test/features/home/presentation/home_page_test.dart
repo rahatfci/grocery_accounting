@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:grocery_accounting/core/result.dart';
 import 'package:grocery_accounting/features/auth/presentation/auth_cubit.dart';
 import 'package:grocery_accounting/features/home/presentation/home_page.dart';
 import 'package:grocery_accounting/features/home/presentation/running_low_cubit.dart';
@@ -13,6 +14,9 @@ import 'package:grocery_accounting/features/purchases/presentation/record_purcha
 import 'package:grocery_accounting/features/reminders/data/run_out_notifier.dart';
 import 'package:grocery_accounting/features/reminders/presentation/run_out_reminders_cubit.dart';
 import 'package:grocery_accounting/features/reports/presentation/reports_page.dart';
+import 'package:grocery_accounting/features/receipts/data/receipt_picker.dart';
+import 'package:grocery_accounting/features/receipts/data/receipt_store.dart';
+import 'package:grocery_accounting/features/receipts/presentation/receipt_uploads_cubit.dart';
 import 'package:grocery_accounting/features/shopping_list/data/shopping_list_repository.dart';
 import 'package:grocery_accounting/features/shopping_list/presentation/shopping_list_cubit.dart';
 import 'package:grocery_accounting/features/shopping_list/presentation/shopping_list_section.dart';
@@ -22,6 +26,7 @@ import '../../items/fake_item_repository.dart';
 import '../../members/fake_member_repository.dart';
 import '../../purchases/fake_purchase_repository.dart';
 import '../../reminders/fake_run_out_notifier.dart';
+import '../../receipts/fake_receipts.dart';
 import '../../shopping_list/fake_shopping_list_repository.dart';
 
 Future<void> _pumpHome(
@@ -32,6 +37,8 @@ Future<void> _pumpHome(
   FakePurchaseRepository? purchaseRepository,
   FakeRunOutNotifier? notifier,
   FakeShoppingListRepository? shoppingListRepository,
+  FakeReceiptPicker? receiptPicker,
+  FakeReceiptStore? receiptStore,
 }) async {
   // The providers sit above MaterialApp exactly as they do in `app.dart`: a
   // pushed route is a sibling of `home`, so anything provided inside `home`
@@ -51,6 +58,12 @@ Future<void> _pumpHome(
         ),
         RepositoryProvider<ShoppingListRepository>.value(
           value: shoppingListRepository ?? FakeShoppingListRepository(),
+        ),
+        RepositoryProvider<ReceiptPicker>.value(
+          value: receiptPicker ?? FakeReceiptPicker(),
+        ),
+        RepositoryProvider<ReceiptStore>.value(
+          value: receiptStore ?? FakeReceiptStore(),
         ),
       ],
       child: BlocProvider(
@@ -172,7 +185,7 @@ void main() {
     await _pumpHome(tester, authRepository, itemRepository);
 
     expect(
-      find.widgetWithText(FilledButton, 'Record a purchase'),
+      find.widgetWithText(OutlinedButton, 'Record a purchase'),
       findsOneWidget,
     );
   });
@@ -186,7 +199,7 @@ void main() {
       memberRepository: memberRepository,
     );
 
-    await tester.tap(find.widgetWithText(FilledButton, 'Record a purchase'));
+    await tester.tap(find.widgetWithText(OutlinedButton, 'Record a purchase'));
     await _pumpRouteTransition(tester);
 
     expect(find.byType(RecordPurchaseView), findsOneWidget);
@@ -199,7 +212,7 @@ void main() {
 
   testWidgets('the review screen can be popped back to Home', (tester) async {
     await _pumpHome(tester, authRepository, itemRepository);
-    await tester.tap(find.widgetWithText(FilledButton, 'Record a purchase'));
+    await tester.tap(find.widgetWithText(OutlinedButton, 'Record a purchase'));
     await _pumpRouteTransition(tester);
 
     await tester.tap(find.byTooltip('Back'));
@@ -207,7 +220,7 @@ void main() {
 
     expect(find.byType(RecordPurchaseView), findsNothing);
     expect(
-      find.widgetWithText(FilledButton, 'Record a purchase'),
+      find.widgetWithText(OutlinedButton, 'Record a purchase'),
       findsOneWidget,
     );
   });
@@ -240,12 +253,15 @@ void main() {
     addTearDown(reminders.close);
     final shoppingList = _shoppingListCubit(itemRepository);
     addTearDown(shoppingList.close);
+    final uploads = ReceiptUploadsCubit(FakeReceiptStore());
+    addTearDown(uploads.close);
     await tester.pumpWidget(
       MultiBlocProvider(
         providers: [
           BlocProvider.value(value: cubit),
           BlocProvider.value(value: reminders),
           BlocProvider.value(value: shoppingList),
+          BlocProvider.value(value: uploads),
         ],
         child: const MaterialApp(home: HomeView(user: testUser)),
       ),
@@ -301,12 +317,15 @@ void main() {
     addTearDown(reminders.close);
     final shoppingList = _shoppingListCubit(itemRepository);
     addTearDown(shoppingList.close);
+    final uploads = ReceiptUploadsCubit(FakeReceiptStore());
+    addTearDown(uploads.close);
     await tester.pumpWidget(
       MultiBlocProvider(
         providers: [
           BlocProvider.value(value: cubit),
           BlocProvider.value(value: reminders),
           BlocProvider.value(value: shoppingList),
+          BlocProvider.value(value: uploads),
         ],
         child: const MaterialApp(home: HomeView(user: testUser)),
       ),
@@ -369,5 +388,118 @@ void main() {
     await tester.pump();
 
     expect(shoppingListRepository.added.single.addedByUserId, testUser.uid);
+  });
+
+  group('capturing a receipt', () {
+    testWidgets('is the largest action on Home', (tester) async {
+      await _pumpHome(tester, authRepository, itemRepository);
+
+      final capture = find.widgetWithText(FilledButton, 'Capture receipt');
+      final record = find.widgetWithText(OutlinedButton, 'Record a purchase');
+      expect(capture, findsOneWidget);
+      expect(
+        tester.getSize(capture).height,
+        greaterThan(tester.getSize(record).height),
+      );
+    });
+
+    testWidgets('opens the review screen with the picked photo', (
+      tester,
+    ) async {
+      final picker = FakeReceiptPicker();
+      await _pumpHome(
+        tester,
+        authRepository,
+        itemRepository,
+        receiptPicker: picker,
+      );
+
+      await tester.tap(find.widgetWithText(FilledButton, 'Capture receipt'));
+      await _pumpRouteTransition(tester);
+      await tester.tap(find.text('Choose from gallery'));
+      await _pumpRouteTransition(tester);
+
+      expect(picker.sources, [ReceiptSource.gallery]);
+      expect(find.byType(RecordPurchaseView), findsOneWidget);
+    });
+
+    testWidgets('dismissing the source sheet stays on Home', (tester) async {
+      final picker = FakeReceiptPicker();
+      await _pumpHome(
+        tester,
+        authRepository,
+        itemRepository,
+        receiptPicker: picker,
+      );
+
+      await tester.tap(find.widgetWithText(FilledButton, 'Capture receipt'));
+      await _pumpRouteTransition(tester);
+      await tester.tapAt(const Offset(10, 10));
+      await _pumpRouteTransition(tester);
+
+      expect(picker.sources, isEmpty);
+      expect(find.byType(RecordPurchaseView), findsNothing);
+    });
+
+    testWidgets('a cancelled capture returns to Home', (tester) async {
+      final picker = FakeReceiptPicker()..result = const Ok(null);
+      await _pumpHome(
+        tester,
+        authRepository,
+        itemRepository,
+        receiptPicker: picker,
+      );
+
+      await tester.tap(find.widgetWithText(FilledButton, 'Capture receipt'));
+      await _pumpRouteTransition(tester);
+      await tester.tap(find.text('Take photo'));
+      await _pumpRouteTransition(tester);
+      await _pumpRouteTransition(tester);
+
+      expect(picker.sources, [ReceiptSource.camera]);
+      expect(find.byType(RecordPurchaseView), findsNothing);
+      expect(find.text('Capture receipt'), findsOneWidget);
+    });
+
+    testWidgets('a denied capture returns to Home and says why', (
+      tester,
+    ) async {
+      final picker = FakeReceiptPicker()
+        ..result = const Err(ReceiptAccessDenied());
+      await _pumpHome(
+        tester,
+        authRepository,
+        itemRepository,
+        receiptPicker: picker,
+      );
+
+      await tester.tap(find.widgetWithText(FilledButton, 'Capture receipt'));
+      await _pumpRouteTransition(tester);
+      await tester.tap(find.text('Take photo'));
+      await _pumpRouteTransition(tester);
+      await _pumpRouteTransition(tester);
+
+      expect(find.byType(RecordPurchaseView), findsNothing);
+      expect(find.text(const ReceiptAccessDenied().message), findsOneWidget);
+    });
+  });
+
+  testWidgets('flushes queued receipts on open and on resume', (tester) async {
+    final store = FakeReceiptStore();
+    await _pumpHome(
+      tester,
+      authRepository,
+      itemRepository,
+      receiptStore: store,
+    );
+    await tester.pump();
+
+    expect(store.flushes, 1);
+
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    await tester.pump();
+
+    expect(store.flushes, 2);
   });
 }
