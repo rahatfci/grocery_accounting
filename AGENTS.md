@@ -132,10 +132,6 @@ fixed at review rather than paid for up front on every step.
 
 ## Known issues
 
-- `assets/` is declared in `pubspec.yaml` but is empty, so Git will not track it.
-  A fresh clone has no `assets/` directory and `flutter build` fails with
-  "unable to find directory entry in pubspec.yaml". Add a file or drop the
-  declaration.
 - **The Firebase plugins apply the Kotlin Gradle Plugin, which Flutter is
   removing support for.** Every Android build prints: "Your app uses the
   following plugins that apply Kotlin Gradle Plugin (KGP): firebase_auth,
