@@ -5,6 +5,7 @@ import 'package:grocery_accounting/core/data_failure.dart';
 import 'package:grocery_accounting/core/result.dart';
 import 'package:grocery_accounting/features/auth/presentation/auth_cubit.dart';
 import 'package:grocery_accounting/features/auth/presentation/auth_gate.dart';
+import 'package:grocery_accounting/features/auth/presentation/auth_state.dart';
 import 'package:grocery_accounting/features/auth/presentation/sign_in_page.dart';
 import 'package:grocery_accounting/features/home/presentation/home_page.dart';
 import 'package:grocery_accounting/features/items/data/item_repository.dart';
@@ -25,6 +26,23 @@ import '../../reports/fake_csv_sharer.dart';
 import '../../shopping_list/fake_shopping_list_repository.dart';
 import '../fake_auth_repository.dart';
 
+List<RepositoryProvider<Object>> _gateProviders(FakeMemberRepository members) =>
+    [
+      RepositoryProvider<MemberRepository>.value(value: members),
+      RepositoryProvider<ItemRepository>.value(
+        value: FakeItemRepository()..initialItems = const [],
+      ),
+      RepositoryProvider<RunOutNotifier>.value(value: FakeRunOutNotifier()),
+      RepositoryProvider<ShoppingListRepository>.value(
+        value: FakeShoppingListRepository()..initialEntries = const [],
+      ),
+      RepositoryProvider<ReceiptPicker>.value(value: FakeReceiptPicker()),
+      RepositoryProvider<ReceiptStore>.value(value: FakeReceiptStore()),
+      RepositoryProvider<ReceiptReader>.value(value: FakeReceiptReader()),
+      RepositoryProvider<AliasRepository>.value(value: FakeAliasRepository()),
+      RepositoryProvider<CsvSharer>.value(value: FakeCsvSharer()),
+    ];
+
 Future<void> _pumpGate(
   WidgetTester tester,
   FakeAuthRepository repository,
@@ -35,23 +53,7 @@ Future<void> _pumpGate(
       // Home watches the catalogue for running low and run-out reminders, and
       // the shopping list, as soon as it mounts.
       home: MultiRepositoryProvider(
-        providers: [
-          RepositoryProvider<MemberRepository>.value(value: members),
-          RepositoryProvider<ItemRepository>.value(
-            value: FakeItemRepository()..initialItems = const [],
-          ),
-          RepositoryProvider<RunOutNotifier>.value(value: FakeRunOutNotifier()),
-          RepositoryProvider<ShoppingListRepository>.value(
-            value: FakeShoppingListRepository()..initialEntries = const [],
-          ),
-          RepositoryProvider<ReceiptPicker>.value(value: FakeReceiptPicker()),
-          RepositoryProvider<ReceiptStore>.value(value: FakeReceiptStore()),
-          RepositoryProvider<ReceiptReader>.value(value: FakeReceiptReader()),
-          RepositoryProvider<AliasRepository>.value(
-            value: FakeAliasRepository(),
-          ),
-          RepositoryProvider<CsvSharer>.value(value: FakeCsvSharer()),
-        ],
+        providers: _gateProviders(members),
         child: BlocProvider(
           create: (_) => AuthCubit(repository),
           child: const AuthGate(),
@@ -120,6 +122,31 @@ void main() {
     await _pumpGate(tester, repository, members);
 
     repository.emitAuthState(testUser);
+    await tester.pumpAndSettle();
+
+    expect(members.upserted, [testUser]);
+  });
+
+  testWidgets('a session restored before the gate is built is mirrored', (
+    tester,
+  ) async {
+    // As in `main`: the cubit exists, and Firebase has reported the saved
+    // session, before the gate is ever built.
+    final cubit = AuthCubit(repository);
+    addTearDown(cubit.close);
+    await tester.pumpWidget(const SizedBox());
+    repository.emitAuthState(testUser);
+    await tester.pump();
+    expect(cubit.state, isA<AuthSignedIn>());
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: MultiRepositoryProvider(
+          providers: _gateProviders(members),
+          child: BlocProvider.value(value: cubit, child: const AuthGate()),
+        ),
+      ),
+    );
     await tester.pumpAndSettle();
 
     expect(members.upserted, [testUser]);

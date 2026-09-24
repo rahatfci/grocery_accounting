@@ -14,8 +14,24 @@ import 'sign_in_page.dart';
 
 /// Chooses the root screen from the session. The switch is exhaustive over the
 /// sealed state, so a new state cannot be added without handling it here.
-class AuthGate extends StatelessWidget {
+class AuthGate extends StatefulWidget {
   const AuthGate({super.key});
+
+  @override
+  State<AuthGate> createState() => _AuthGateState();
+}
+
+class _AuthGateState extends State<AuthGate> {
+  @override
+  void initState() {
+    super.initState();
+    // A saved session is usually restored before the gate is built, and a
+    // listener only hears changes after it subscribes. Without this, a member
+    // who stays signed in is never mirrored.
+    if (context.read<AuthCubit>().state case AuthSignedIn(:final user)) {
+      _mirrorMember(context.read<MemberRepository>(), user);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -45,8 +61,8 @@ class AuthGate extends StatelessWidget {
 ///
 /// Fire and forget on purpose: the write must never block sign in or turn a
 /// Firestore hiccup into a screen the member cannot get past. A failure shows
-/// up later as a member missing from the picker, and the next sign in writes
-/// it again.
+/// up later as a member missing from the picker, and the next launch or sign
+/// in writes it again.
 void _mirrorMember(MemberRepository repository, AppUser user) {
   unawaited(
     repository
