@@ -221,9 +221,11 @@ a workflow failure.
 ## Automatic verification
 
 Automatic GitHub checks are a separate explicit setup. `/onboard` only reports
-existing checks and points to `/ci` when none exist. **This project has no
-`Verify` command and no `.github/workflows/` yet.** Running `/ci` inspects the
-real project and defines one `Verify` command from checks that already exist.
+existing checks and points to `/ci` when none exist. **This project's
+`Verify` command is `flutter analyze && flutter test && flutter build apk
+--debug`, run by `.github/workflows/verify.yml` (set up by `/ci` on
+2026-09-24).** Running `/ci` inspects the real project and defines one `Verify`
+command from checks that already exist.
 Use this order when available: typecheck, tests, then build. Never invent a test
 runner or another check just to fill the command.
 

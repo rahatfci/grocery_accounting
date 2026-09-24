@@ -55,6 +55,7 @@ Confirmed against this project on 2026-09-20.
 
 | Purpose | Command |
 | --- | --- |
+| Verify | `flutter analyze && flutter test && flutter build apk --debug` |
 | Run | `flutter run` (add `-d <device-id>` to target one device) |
 | Devices | `flutter devices` |
 | Analyze | `flutter analyze` |
@@ -66,9 +67,13 @@ Confirmed against this project on 2026-09-20.
 | Build Android release | `flutter build appbundle --release` |
 | Build iOS release | `flutter build ipa --release` |
 
+`Verify` is the gate run before merging and by the `Verify` GitHub workflow
+(`.github/workflows/verify.yml`) on pull requests and pushes to `main`. It
+takes about a minute locally with a warm Gradle cache. Device runs, iOS builds
+and release builds stay out of it.
+
 Not available yet:
 
-- **Verify** - no combined verification command is defined for this project.
 - **Integration tests** - there is no `integration_test/` directory. Set one up
   deliberately rather than adding a runner mid-feature.
 
@@ -76,11 +81,7 @@ Not available yet:
 
 `flutter test` is the test command, so tests are a gate for logic-bearing work.
 
-**The suite is currently empty and `flutter test` exits 1.** The default
-`flutter create` counter test was deleted during onboarding because it asserted
-against a counter screen that `lib/main.dart` no longer has. An empty suite
-failing is intentional: it should fail, not pass. The first feature that adds
-logic or a screen must ship the first real test, which turns the gate green.
+Logic-bearing work ships with its tests, and the suite must stay green.
 
 Test files mirror source: `lib/features/cart/cart_total.dart` gets
 `test/features/cart/cart_total_test.dart`.
