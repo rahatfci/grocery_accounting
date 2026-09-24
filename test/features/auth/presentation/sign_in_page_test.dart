@@ -107,10 +107,8 @@ void main() {
     final email = tester.widget<TextField>(find.byType(TextField).first);
     expect(email.enabled, isFalse);
 
-    // Success is stream-driven, so the spinner stays until the auth stream
-    // confirms the session. Without this the page never leaves submitting.
+    // Releasing the gate lets the sign in finish, which leaves submitting.
     repository.signInGate?.complete();
-    repository.emitAuthState(testUser);
     await tester.pumpAndSettle();
   });
 

@@ -1,9 +1,11 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 
 import 'app.dart';
 import 'core/di/injection.dart';
+import 'core/error_reporting_bloc_observer.dart';
 import 'features/auth/presentation/auth_cubit.dart';
 import 'features/items/data/item_repository.dart';
 import 'features/members/data/member_repository.dart';
@@ -28,6 +30,7 @@ Future<void> main() async {
     persistenceEnabled: true,
     webPersistentTabManager: WebPersistentMultipleTabManager(),
   );
+  Bloc.observer = const ErrorReportingBlocObserver();
   configureDependencies();
   runApp(
     GroceryAccountingApp(

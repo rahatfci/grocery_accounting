@@ -7,81 +7,6 @@
 > finding is `open` or `fixed`, then archives resolved findings with the work
 > and resets this file.
 
-### F-02 [P2] open - `AuthSubmitting` has no exit unless the auth stream delivers a user
-
-**File:** lib/features/auth/presentation/auth_cubit.dart:24-29
-**Found:** 2026-09-21 by /audit (scope: current; lens: quality)
-**Why it matters:** On `Ok`, `signIn` emits nothing by design, leaving the cubit
-in `AuthSubmitting` until `_onAuthStateChanged` receives a non-null user. While
-that state holds, `AuthGate` shows `SignInPage` with both fields `enabled: false`
-and the submit button `onPressed: null` (sign_in_page.dart:95, 113, 204), so the
-user cannot retry, cannot edit, and sees no message. There is no timeout and no
-fallback, so `AuthSubmitting` is terminal for anything that stops the stream from
-reporting: a dropped platform-channel event, a stream error (see F-03), or a
-successful re-authentication Firebase does not treat as a state change. The
-project's own widget test documents the property at
-`test/features/auth/presentation/sign_in_page_test.dart:110`: "Without this the
-page never leaves submitting."
-
-Against real Firebase the stream does fire, so this is fragility rather than a
-reproduced defect, but the cost of the fragility is a screen with no way out.
-
-**Suggested fix:** Emit on `Ok` as well:
-`if (result case Ok(:final value)) emit(AuthSignedIn(value));`. This does not
-weaken the intended property, because `AuthSignedIn` is `Equatable` over
-`AppUser`, so the stream event that follows carries an equal state and `Cubit`
-drops it. The invariant "never show Home for a session Firebase has not
-confirmed" still holds: the repository returns `Ok` only when Firebase returned a
-non-null `User`. No current requirement is lost.
-**Resolution:**
-
-### F-03 [P2] open - The auth subscription has no error handler, stranding the app on the startup spinner
-
-**File:** lib/features/auth/presentation/auth_cubit.dart:15
-**Found:** 2026-09-21 by /audit (scope: current; lens: quality)
-**Why it matters:** `.listen(_onAuthStateChanged)` passes no `onError`, so an
-error on the Firebase auth stream (the plugin forwards platform-channel failures
-through it) goes to the zone as an unhandled exception and the cubit's state does
-not move. If that happens before the first event, the state is still
-`AuthInitial`, and `AuthGate` renders `_SessionUnknown`, a bare
-`CircularProgressIndicator` with no text, no retry and no timeout
-(auth_gate.dart:18, 33). Relaunching takes the same path. The user gets a
-permanently spinning app and no signal about why.
-
-`coding-standards.md` requires errors in async work to be handled or allowed to
-propagate deliberately; this path does neither.
-
-**Suggested fix:** Add an `onError` to the subscription that emits a state the
-gate can render, for example `AuthSignInFailure(const UnexpectedAuthFailure())`,
-which `AuthGate` already maps to `SignInPage` and which gives the user a retry,
-and forward the error and stack to `addError` so it reaches `BlocObserver`
-instead of vanishing. No current requirement is lost.
-**Resolution:**
-
-### F-04 [P2] open - The bare `catch (_)` discards the error and its stack trace
-
-**File:** lib/features/auth/presentation/auth_cubit.dart:30-34
-**Found:** 2026-09-21 by /audit (scope: current; lens: quality)
-**Why it matters:** `catch (_)` catches `Object`, so it catches `Error` subtypes
-as well as the `Exception`s it is aimed at. `FirebaseAuthRepository` catches only
-`FirebaseAuthException` (firebase_auth_repository.dart:35), so this is the net for
-everything else, which is the right shape. The problem is that it binds neither
-the error nor the stack trace and forwards neither anywhere. A `TypeError` in
-`_toAppUser`, a `StateError` from a misused plugin, and a `PlatformException` all
-become the same "Something went wrong. Try again" with zero diagnostics, in debug
-as well as release. `test/features/auth/presentation/auth_cubit_test.dart:87-105`
-and `sign_in_page_test.dart:72-87` encode exactly that: a `StateError` is
-swallowed into a user message, and no test asserts it is reported anywhere
-because nowhere reports it.
-
-Showing the user a mapped message is correct and must stay. Throwing away the
-evidence is what costs: the first field bug on this path will be unactionable.
-
-**Suggested fix:** `catch (error, stackTrace)`, then `addError(error, stackTrace)`
-before the `emit`. `Cubit.addError` routes to `BlocObserver.onError`, needs no new
-dependency, and changes nothing the user sees. No current requirement is lost.
-**Resolution:**
-
 ### F-05 [P3] open - `FirebaseAuthRepository` has no test, including its null-user branch
 
 **File:** lib/features/auth/data/firebase_auth_repository.dart:21-43
@@ -286,3 +211,21 @@ uploads them after the commit, and `setReceiptImagePath` then links the path.
 A refused commit discards the photo without confirming it. Covered by store
 tests, including a flush racing a new keep, and by cubit tests on both
 platforms. Awaiting an `/audit` pass to close.
+
+### F-15 [P3] open - The sign-in error test does not prove the stack trace is forwarded
+
+**File:** test/features/auth/presentation/auth_cubit_test.dart:127-128
+**Found:** 2026-09-24 by /audit independent (scope: current; lens: tests)
+**Why it matters:** F-04 was about the error and its stack trace being thrown
+away, and the spec asks the extended `StateError` test to assert that both reach
+the observer. The test checks the error with `same(thrown)`, but the stack trace
+only with `toString()` being non-empty. `Cubit.addError`'s stack trace parameter
+is optional and defaults to `StackTrace.current`, so a regression to
+`addError(error)` (dropping the caught trace for the call-site one) still
+passes. The observer unit test does check `same(stackTrace)`, so only the cubit
+half is unguarded.
+**Suggested fix:** Assert the recorded trace points at the throw site, for
+example `contains('fake_auth_repository.dart')`, or have the fake throw with a
+known trace via `Error.throwWithStackTrace` and compare with `same`. Test only;
+no current requirement is lost.
+**Resolution:**

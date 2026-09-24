@@ -12,7 +12,10 @@ import 'auth_state.dart';
 @injectable
 class AuthCubit extends Cubit<AuthState> {
   AuthCubit(this._repository) : super(const AuthInitial()) {
-    _subscription = _repository.authStateChanges().listen(_onAuthStateChanged);
+    _subscription = _repository.authStateChanges().listen(
+      _onAuthStateChanged,
+      onError: _onAuthStreamError,
+    );
   }
 
   final AuthRepository _repository;
@@ -22,14 +25,20 @@ class AuthCubit extends Cubit<AuthState> {
     emit(const AuthSubmitting());
     try {
       final result = await _repository.signIn(email: email, password: password);
-      // Success is left to the auth stream, so a signed-in state is only ever
-      // claimed once Firebase itself reports the session.
-      if (result case Err(:final error)) {
-        emit(AuthSignInFailure(error));
+      // Ok carries the user Firebase returned, so this is already a confirmed
+      // session. The stream event that follows is an equal state and is
+      // dropped, and emitting here means the form cannot wait on it forever.
+      switch (result) {
+        case Ok(:final value):
+          emit(AuthSignedIn(value));
+        case Err(:final error):
+          emit(AuthSignInFailure(error));
       }
-    } catch (_) {
+    } catch (error, stackTrace) {
       // The repository maps the Firebase codes it knows. Anything else still
-      // has to reach the user as a state rather than an unhandled error.
+      // has to reach the user as a state rather than an unhandled error, and is
+      // reported so the cause is not lost behind the generic message.
+      addError(error, stackTrace);
       emit(const AuthSignInFailure(UnexpectedAuthFailure()));
     }
   }
@@ -54,6 +63,15 @@ class AuthCubit extends Cubit<AuthState> {
       return;
     }
     emit(const AuthSignedOut());
+  }
+
+  void _onAuthStreamError(Object error, StackTrace stackTrace) {
+    addError(error, stackTrace);
+    // Only a state that is waiting on the stream needs a way out. A signed-in
+    // member stays where they are rather than being sent back to sign in.
+    if (state is AuthInitial || state is AuthSubmitting) {
+      emit(const AuthSignInFailure(UnexpectedAuthFailure()));
+    }
   }
 
   @override

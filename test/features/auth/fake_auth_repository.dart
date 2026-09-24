@@ -22,6 +22,8 @@ class FakeAuthRepository implements AuthRepository {
 
   void emitAuthState(AppUser? user) => _controller.add(user);
 
+  void emitAuthError(Object error) => _controller.addError(error);
+
   @override
   Stream<AppUser?> authStateChanges() => _controller.stream;
 

@@ -1,3 +1,6 @@
+import 'dart:async';
+
+import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:grocery_accounting/core/result.dart';
 import 'package:grocery_accounting/features/auth/logic/auth_failure.dart';
@@ -5,6 +8,24 @@ import 'package:grocery_accounting/features/auth/presentation/auth_cubit.dart';
 import 'package:grocery_accounting/features/auth/presentation/auth_state.dart';
 
 import '../fake_auth_repository.dart';
+
+class _RecordingObserver extends BlocObserver {
+  final errors = <(Object, StackTrace)>[];
+
+  @override
+  void onError(BlocBase<dynamic> bloc, Object error, StackTrace stackTrace) {
+    errors.add((error, stackTrace));
+    super.onError(bloc, error, stackTrace);
+  }
+}
+
+_RecordingObserver _installObserver() {
+  final previous = Bloc.observer;
+  final observer = _RecordingObserver();
+  Bloc.observer = observer;
+  addTearDown(() => Bloc.observer = previous);
+  return observer;
+}
 
 void main() {
   late FakeAuthRepository repository;
@@ -45,27 +66,27 @@ void main() {
     await cubit.close();
   });
 
-  test(
-    'a successful sign in is only claimed once the stream confirms',
-    () async {
-      final cubit = AuthCubit(repository);
-      final expectation = expectLater(
-        cubit.stream,
-        emitsInOrder([const AuthSubmitting(), const AuthSignedIn(testUser)]),
-      );
+  test('a successful sign in is claimed from the returned user', () async {
+    final cubit = AuthCubit(repository);
+    final states = <AuthState>[];
+    final subscription = cubit.stream.listen(states.add);
 
-      await cubit.signIn(email: 'rahat@example.com', password: 'correct');
-      expect(
-        cubit.state,
-        const AuthSubmitting(),
-        reason: 'the repository returning Ok is not itself a session',
-      );
-      repository.emitAuthState(testUser);
+    await cubit.signIn(email: 'rahat@example.com', password: 'correct');
+    expect(
+      cubit.state,
+      const AuthSignedIn(testUser),
+      reason: 'the form must not wait on the stream to leave submitting',
+    );
 
-      await expectation;
-      await cubit.close();
-    },
-  );
+    // The stream confirming the same session is an equal state.
+    repository.emitAuthState(testUser);
+    await Future<void>.delayed(Duration.zero);
+
+    expect(states, [const AuthSubmitting(), const AuthSignedIn(testUser)]);
+
+    await subscription.cancel();
+    await cubit.close();
+  });
 
   test('a rejected sign in surfaces the mapped failure', () async {
     repository.signInResult = const Err(InvalidCredentials());
@@ -85,9 +106,11 @@ void main() {
   });
 
   test(
-    'a throwable the repository does not map still reaches the user',
+    'a throwable the repository does not map reaches the user and is reported',
     () async {
-      repository.signInThrows = StateError('platform channel died');
+      final observer = _installObserver();
+      final thrown = StateError('platform channel died');
+      repository.signInThrows = thrown;
       final cubit = AuthCubit(repository);
       final expectation = expectLater(
         cubit.stream,
@@ -100,19 +123,28 @@ void main() {
       await cubit.signIn(email: 'rahat@example.com', password: 'whatever');
 
       await expectation;
+      expect(observer.errors, hasLength(1));
+      expect(observer.errors.single.$1, same(thrown));
+      expect(observer.errors.single.$2.toString(), isNotEmpty);
       await cubit.close();
     },
   );
 
   test('a stray signed-out event does not interrupt a sign in', () async {
+    repository.signInGate = Completer<void>();
     final cubit = AuthCubit(repository);
 
-    await cubit.signIn(email: 'rahat@example.com', password: 'correct');
+    final signingIn = cubit.signIn(
+      email: 'rahat@example.com',
+      password: 'correct',
+    );
     repository.emitAuthState(null);
     await Future<void>.delayed(Duration.zero);
 
     expect(cubit.state, const AuthSubmitting());
 
+    repository.signInGate?.complete();
+    await signingIn;
     await cubit.close();
   });
 
@@ -147,6 +179,69 @@ void main() {
     await Future<void>.delayed(Duration.zero);
 
     cubit.failureAcknowledged();
+
+    expect(cubit.state, const AuthSignedIn(testUser));
+
+    await cubit.close();
+  });
+
+  test('a stream error before any session is known offers a retry', () async {
+    final observer = _installObserver();
+    final cubit = AuthCubit(repository);
+    final thrown = StateError('channel died');
+
+    repository.emitAuthError(thrown);
+    await Future<void>.delayed(Duration.zero);
+
+    expect(cubit.state, const AuthSignInFailure(UnexpectedAuthFailure()));
+    expect(observer.errors.single.$1, same(thrown));
+
+    await cubit.close();
+  });
+
+  test('a stream error during a sign in ends the submitting state', () async {
+    repository.signInGate = Completer<void>();
+    final cubit = AuthCubit(repository);
+
+    final signingIn = cubit.signIn(
+      email: 'rahat@example.com',
+      password: 'correct',
+    );
+    repository.emitAuthError(StateError('channel died'));
+    await Future<void>.delayed(Duration.zero);
+
+    expect(cubit.state, const AuthSignInFailure(UnexpectedAuthFailure()));
+
+    repository.signInGate?.complete();
+    await signingIn;
+    await cubit.close();
+  });
+
+  test('a stream error does not sign out a signed-in member', () async {
+    final observer = _installObserver();
+    final cubit = AuthCubit(repository);
+    repository.emitAuthState(testUser);
+    await Future<void>.delayed(Duration.zero);
+
+    repository.emitAuthError(StateError('channel died'));
+    await Future<void>.delayed(Duration.zero);
+
+    expect(cubit.state, const AuthSignedIn(testUser));
+    expect(
+      observer.errors,
+      hasLength(1),
+      reason: 'the error is still reported',
+    );
+
+    await cubit.close();
+  });
+
+  test('the auth stream keeps working after an error', () async {
+    final cubit = AuthCubit(repository);
+
+    repository.emitAuthError(StateError('channel died'));
+    repository.emitAuthState(testUser);
+    await Future<void>.delayed(Duration.zero);
 
     expect(cubit.state, const AuthSignedIn(testUser));
 
