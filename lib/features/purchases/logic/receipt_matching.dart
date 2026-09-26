@@ -81,5 +81,27 @@ PurchaseDraftLine lineFromReading(
     unit: unit,
     lineTotal: scanned.lineTotal,
     scannedText: scanned.rawText,
+    learned: true,
   );
+}
+
+/// A size, a count or a unit on its own: `400G`, `0,850`, `KG`, `X6`.
+final _sizeToken = RegExp(
+  r'^(\d+([.,]\d+)?(G|GR|KG|L|LT|ML|CL|PZ)?|G|GR|KG|LT|ML|CL|PZ|X\d+|\d+X)$',
+  caseSensitive: false,
+);
+
+/// A name for a new item made from [rawText]: the receipt's wording with its
+/// sizes and counts dropped and the case made readable, so
+/// `POMODORI PELATI 400G` offers `Pomodori pelati`.
+String suggestedItemName(String rawText) {
+  final words = [
+    for (final word in rawText.trim().split(RegExp(r'\s+')))
+      if (word.isNotEmpty && !_sizeToken.hasMatch(word)) word.toLowerCase(),
+  ];
+  if (words.isEmpty) {
+    return '';
+  }
+  final name = words.join(' ');
+  return name[0].toUpperCase() + name.substring(1);
 }

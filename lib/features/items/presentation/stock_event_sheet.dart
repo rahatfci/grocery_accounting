@@ -1,22 +1,29 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:material_symbols_icons/symbols.dart';
 
 import '../../../core/data_failure.dart';
 import '../../../core/refusal_window.dart';
 import '../../../core/result.dart';
+import '../../../core/theme/app_colors.dart';
+import '../../../core/theme/app_theme.dart';
+import '../../../core/theme/app_tokens.dart';
+import '../../../core/widgets/app_button.dart';
+import '../../../core/widgets/app_sheet.dart';
 import '../../../core/widgets/failure_message.dart';
+import '../../../core/widgets/form_controls.dart';
 import '../../auth/logic/app_user.dart';
 import '../../purchases/logic/quantity_conversion.dart';
 import '../logic/item.dart';
 import '../logic/item_unit.dart';
 import '../logic/item_validation.dart';
+import '../logic/stock.dart';
 import '../logic/stock_event.dart';
 import 'items_cubit.dart';
 import 'items_state.dart';
 
 /// Opens the sheet for [type] on [item], writing through the caller's own
-/// [ItemsCubit]. A sheet is a new route, so the cubit is handed over rather
-/// than found by lookup.
+/// [ItemsCubit], handed over so the sheet works wherever it opens.
 void openStockEventSheet(
   BuildContext context, {
   required Item item,
@@ -24,10 +31,8 @@ void openStockEventSheet(
   required AppUser user,
 }) {
   final cubit = context.read<ItemsCubit>();
-
-  showModalBottomSheet<void>(
-    context: context,
-    isScrollControlled: true,
+  showAppSheet<void>(
+    context,
     builder: (_) => BlocProvider.value(
       value: cubit,
       child: StockEventSheet(item: item, type: type, user: user),
@@ -35,7 +40,8 @@ void openStockEventSheet(
   );
 }
 
-/// Records a use, an adjustment or a recount of one item.
+/// Records a use, an adjustment or a recount of one item, showing what the
+/// stock will be before it is saved.
 class StockEventSheet extends StatefulWidget {
   const StockEventSheet({
     required this.item,
@@ -79,9 +85,7 @@ class _StockEventSheetState extends State<StockEventSheet> {
   }
 
   void _onFieldChanged([Object? _]) {
-    if (_failure != null) {
-      setState(() => _failure = null);
-    }
+    setState(() => _failure = null);
   }
 
   /// The newest version of the item, so the stock is computed from the number
@@ -98,21 +102,13 @@ class _StockEventSheetState extends State<StockEventSheet> {
     return widget.item;
   }
 
-  Future<void> _save() async {
-    final form = _formKey.currentState;
-    if (form == null || !form.validate()) {
-      return;
-    }
+  StockEvent? _event() {
     final quantity = parseDecimal(_quantityController.text);
-    if (quantity == null) {
-      return;
+    if (quantity == null || (_isAdjustment && _removing == null)) {
+      return null;
     }
-    FocusScope.of(context).unfocus();
-
-    final cubit = context.read<ItemsCubit>();
-    final navigator = Navigator.of(context);
     final note = _noteController.text.trim();
-    final event = StockEvent(
+    return StockEvent(
       itemId: widget.item.id,
       type: widget.type,
       quantity: _removing == true ? -quantity : quantity,
@@ -120,7 +116,21 @@ class _StockEventSheetState extends State<StockEventSheet> {
       userId: widget.user.uid,
       note: note.isEmpty ? null : note,
     );
+  }
 
+  Future<void> _save() async {
+    final form = _formKey.currentState;
+    if (form == null || !form.validate()) {
+      return;
+    }
+    final event = _event();
+    if (event == null) {
+      return;
+    }
+    FocusScope.of(context).unfocus();
+
+    final cubit = context.read<ItemsCubit>();
+    final navigator = Navigator.of(context);
     setState(() {
       _saving = true;
       _failure = null;
@@ -146,129 +156,163 @@ class _StockEventSheetState extends State<StockEventSheet> {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final (title, quantityLabel) = switch (widget.type) {
-      StockEventType.consumed => ('Log use', 'Amount used'),
-      StockEventType.adjustment => ('Adjust stock', 'Amount'),
-      StockEventType.recount => ('Recount', 'Counted amount'),
+    final text = Theme.of(context).textTheme;
+    final cubit = context.watch<ItemsCubit>();
+    final item = _currentItem(cubit);
+    final state = cubit.state;
+    final now = state is ItemsLoaded ? state.now : DateTime.now();
+    final (title, quantityLabel, action) = switch (widget.type) {
+      StockEventType.consumed => ('Log use', 'Amount used', 'Save use'),
+      StockEventType.adjustment => (
+        'Adjust stock',
+        'Amount',
+        'Save adjustment',
+      ),
+      StockEventType.recount => ('Recount', 'Counted amount', 'Save recount'),
     };
+    final units = unitsFor(item);
 
-    return Padding(
-      padding: EdgeInsets.only(bottom: MediaQuery.viewInsetsOf(context).bottom),
-      child: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(24),
-          child: Form(
-            key: _formKey,
-            autovalidateMode: AutovalidateMode.onUserInteraction,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Text(title, style: theme.textTheme.titleLarge),
-                const SizedBox(height: 4),
-                Text(
-                  widget.item.name,
-                  style: theme.textTheme.bodyMedium,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-                const SizedBox(height: 16),
-                if (_isAdjustment) ...[
-                  _DirectionField(
-                    removing: _removing,
-                    enabled: !_saving,
-                    onChanged: (removing) {
-                      setState(() => _removing = removing);
-                      _onFieldChanged();
-                    },
-                  ),
-                  const SizedBox(height: 16),
-                ],
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Expanded(
-                      flex: 3,
-                      child: TextFormField(
-                        controller: _quantityController,
-                        enabled: !_saving,
-                        autofocus: true,
-                        decoration: InputDecoration(
-                          labelText: quantityLabel,
-                          border: const OutlineInputBorder(),
-                        ),
-                        keyboardType: const TextInputType.numberWithOptions(
-                          decimal: true,
-                        ),
-                        textInputAction: TextInputAction.next,
-                        validator: (value) =>
-                            stockEventQuantityError(widget.type, value),
-                        onChanged: _onFieldChanged,
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      flex: 2,
-                      child: DropdownButtonFormField<ItemUnit>(
-                        initialValue: _unit,
-                        decoration: const InputDecoration(
-                          labelText: 'Unit',
-                          border: OutlineInputBorder(),
-                        ),
-                        items: [
-                          for (final unit in unitsFor(widget.item))
-                            DropdownMenuItem(
-                              value: unit,
-                              child: Text(unit.label),
-                            ),
-                        ],
-                        onChanged: _saving
-                            ? null
-                            : (unit) {
-                                if (unit != null) {
-                                  setState(() => _unit = unit);
-                                  _onFieldChanged();
-                                }
-                              },
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 16),
-                TextFormField(
-                  controller: _noteController,
-                  enabled: !_saving,
-                  decoration: const InputDecoration(
-                    labelText: 'Note (optional)',
-                    border: OutlineInputBorder(),
-                  ),
-                  textCapitalization: TextCapitalization.sentences,
-                  textInputAction: TextInputAction.done,
-                  onChanged: _onFieldChanged,
-                  onFieldSubmitted: (_) => _save(),
-                ),
-                if (_failure case final failure?) ...[
-                  const SizedBox(height: 16),
-                  FailureMessage(message: failure.message),
-                ],
-                const SizedBox(height: 24),
-                FilledButton(
-                  onPressed: _saving ? null : _save,
-                  style: FilledButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(vertical: 16),
-                  ),
-                  child: _saving
-                      ? const SizedBox.square(
-                          dimension: 20,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                      : const Text('Save'),
-                ),
-              ],
+    return Form(
+      key: _formKey,
+      autovalidateMode: AutovalidateMode.onUserInteraction,
+      child: SheetFrame(
+        children: [
+          SheetTitle(
+            title: title,
+            subtitle: Text(
+              '${item.name} · '
+              '${formatStock(currentStock(item, now: now), item.unit)} now',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: text.bodyMedium?.copyWith(color: AppColors.textSecondary),
             ),
           ),
-        ),
+          if (_isAdjustment)
+            _DirectionField(
+              removing: _removing,
+              enabled: !_saving,
+              onChanged: (removing) {
+                setState(() => _removing = removing);
+                _onFieldChanged();
+              },
+            ),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: LabeledField(
+                  label: quantityLabel,
+                  child: TextFormField(
+                    controller: _quantityController,
+                    enabled: !_saving,
+                    autofocus: true,
+                    keyboardType: const TextInputType.numberWithOptions(
+                      decimal: true,
+                    ),
+                    textInputAction: TextInputAction.next,
+                    validator: (value) =>
+                        stockEventQuantityError(widget.type, value),
+                    onChanged: _onFieldChanged,
+                  ),
+                ),
+              ),
+              const SizedBox(width: AppSpace.s12),
+              Expanded(
+                child: LabeledField(
+                  label: 'Unit',
+                  child: Padding(
+                    // Sits level with the 52 px field beside it.
+                    padding: const EdgeInsets.symmetric(vertical: 4),
+                    child: SegmentedPicker<ItemUnit>(
+                      segments: [
+                        for (final unit in units)
+                          Segment(value: unit, label: unit.label),
+                      ],
+                      selected: units.contains(_unit) ? _unit : units.first,
+                      onChanged: _saving
+                          ? null
+                          : (unit) {
+                              setState(() => _unit = unit);
+                              _onFieldChanged();
+                            },
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          LabeledField(
+            label: 'Note (optional)',
+            child: TextFormField(
+              controller: _noteController,
+              enabled: !_saving,
+              textCapitalization: TextCapitalization.sentences,
+              textInputAction: TextInputAction.done,
+              onChanged: _onFieldChanged,
+              onFieldSubmitted: (_) => _save(),
+            ),
+          ),
+          _Preview(item: item, event: _event(), now: now),
+          if (_failure case final failure?)
+            FailureMessage(message: failure.message),
+          AppButton(
+            label: action,
+            expand: true,
+            busy: _saving,
+            onPressed: _save,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// What the stock will be once the event is saved, worked out the way the
+/// save works it out.
+class _Preview extends StatelessWidget {
+  const _Preview({required this.item, required this.event, required this.now});
+
+  final Item item;
+  final StockEvent? event;
+  final DateTime now;
+
+  @override
+  Widget build(BuildContext context) {
+    final text = Theme.of(context).textTheme;
+    final before = currentStock(item, now: now);
+    final event = this.event;
+    final after = event == null ? null : baselineAfter(item, event, now: now);
+    final color = switch (after) {
+      null => AppColors.textTertiary,
+      final value when value < (before < 0 ? 0 : before) => AppColors.negative,
+      final value when value > before => AppColors.positive,
+      _ => AppColors.textPrimary,
+    };
+
+    return Container(
+      padding: const EdgeInsets.all(AppSpace.s16),
+      decoration: BoxDecoration(
+        color: AppColors.subtle,
+        borderRadius: BorderRadius.circular(AppRadius.md),
+      ),
+      child: Row(
+        children: [
+          Text(
+            'New stock',
+            style: text.bodyMedium?.copyWith(color: AppColors.textSecondary),
+          ),
+          const SizedBox(width: AppSpace.s12),
+          Expanded(
+            child: Text(
+              after == null
+                  ? formatStock(before, item.unit)
+                  : '${formatStock(before, item.unit)} → '
+                        '${formatStock(after, item.unit)}',
+              textAlign: TextAlign.end,
+              style: text.bodyMediumStrong.copyWith(color: color),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -297,40 +341,34 @@ class _DirectionField extends StatelessWidget {
       validator: (value) => value == null ? 'Choose add or remove' : null,
       builder: (field) {
         final error = field.errorText;
-
         return Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            SegmentedButton<bool>(
+            SegmentedPicker<bool>(
               segments: const [
-                ButtonSegment(
-                  value: false,
-                  label: Text('Add'),
-                  icon: Icon(Icons.add),
-                ),
-                ButtonSegment(
+                Segment(value: false, label: 'Add', icon: Symbols.add_rounded),
+                Segment(
                   value: true,
-                  label: Text('Remove'),
-                  icon: Icon(Icons.remove),
+                  label: 'Remove',
+                  icon: Symbols.remove_rounded,
                 ),
               ],
-              selected: {?removing},
-              emptySelectionAllowed: true,
-              onSelectionChanged: enabled
-                  ? (selection) {
-                      if (selection.isNotEmpty) {
-                        onChanged(selection.first);
-                        field.didChange(selection.first);
-                      }
+              selected: removing,
+              onChanged: enabled
+                  ? (value) {
+                      onChanged(value);
+                      field.didChange(value);
                     }
                   : null,
             ),
             if (error != null)
               Padding(
-                padding: const EdgeInsets.only(top: 8, left: 12),
+                padding: const EdgeInsets.only(top: AppSpace.s6),
                 child: Text(
                   error,
-                  style: TextStyle(color: Theme.of(context).colorScheme.error),
+                  style: Theme.of(
+                    context,
+                  ).textTheme.bodySmall?.copyWith(color: AppColors.negative),
                 ),
               ),
           ],

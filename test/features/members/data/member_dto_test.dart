@@ -11,7 +11,7 @@ void main() {
   );
 
   group('memberToFirestore', () {
-    test('writes only the fields a sign in refreshes', () {
+    test('writes the name and the email', () {
       expect(memberToFirestore(member), {
         'displayName': 'rahat',
         'email': 'rahat@example.com',
@@ -20,6 +20,47 @@ void main() {
 
     test('leaves createdAt alone, so a later sign in cannot move it', () {
       expect(memberToFirestore(member).containsKey('createdAt'), isFalse);
+    });
+  });
+
+  group('memberRefreshToFirestore', () {
+    test('keeps a name the household chose and refreshes the email', () {
+      expect(
+        memberRefreshToFirestore(
+          email: 'rahat@example.com',
+          existingDisplayName: 'Rahat A.',
+        ),
+        {'email': 'rahat@example.com'},
+      );
+    });
+
+    test('replaces the name the app used to derive on its own', () {
+      expect(
+        memberRefreshToFirestore(
+          email: 'rahat@example.com',
+          existingDisplayName: 'rahat',
+        ),
+        {'email': 'rahat@example.com', 'displayName': 'Rahat'},
+      );
+    });
+
+    test('names a document whose name is missing or not text', () {
+      expect(
+        memberRefreshToFirestore(
+          email: 'rahat@example.com',
+          existingDisplayName: 42,
+        ),
+        {'email': 'rahat@example.com', 'displayName': 'Rahat'},
+      );
+    });
+
+    test('never touches createdAt', () {
+      final refresh = memberRefreshToFirestore(
+        email: 'rahat@example.com',
+        existingDisplayName: null,
+      );
+
+      expect(refresh.containsKey('createdAt'), isFalse);
     });
   });
 
@@ -46,7 +87,7 @@ void main() {
     test('derives a name for a document written without one', () {
       final read = memberFromFirestore('abc123', {'email': 'anna@example.com'});
 
-      expect(read.displayName, 'anna');
+      expect(read.displayName, 'Anna');
     });
 
     test(

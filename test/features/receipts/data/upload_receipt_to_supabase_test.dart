@@ -129,4 +129,58 @@ void main() {
       const ConnectionUnavailable(),
     );
   });
+
+  group('downloadReceiptFromSupabase', () {
+    test('gets the bucket path with the publishable key', () async {
+      late http.Request sent;
+      final client = MockClient((request) async {
+        sent = request;
+        return http.Response.bytes([1, 2, 3], 200);
+      });
+
+      final result = await downloadReceiptFromSupabase(client, 'receipts/p1');
+
+      expect((result as Ok<Uint8List, DataFailure>).value, [1, 2, 3]);
+      expect(sent.method, 'GET');
+      expect(
+        sent.url.toString(),
+        '${SupabaseConfig.url}/storage/v1/object/Grocery%20Accounting/receipts/p1',
+      );
+      expect(sent.headers['apikey'], SupabaseConfig.publishableKey);
+    });
+
+    test('a refusal, even inside a 400, is a permission failure', () async {
+      final client = MockClient(
+        (_) async => http.Response('{"statusCode":"403"}', 400),
+      );
+
+      final result = await downloadReceiptFromSupabase(client, 'receipts/p1');
+
+      expect(result, const Err<Uint8List, DataFailure>(PermissionDenied()));
+    });
+
+    test('a missing object is unexpected, not a crash', () async {
+      final client = MockClient(
+        (_) async => http.Response('{"statusCode":"404"}', 400),
+      );
+
+      final result = await downloadReceiptFromSupabase(client, 'receipts/p1');
+
+      expect(
+        result,
+        const Err<Uint8List, DataFailure>(UnexpectedDataFailure()),
+      );
+    });
+
+    test('no network is a connection failure', () async {
+      final client = MockClient((_) async => throw http.ClientException('x'));
+
+      final result = await downloadReceiptFromSupabase(client, 'receipts/p1');
+
+      expect(
+        result,
+        const Err<Uint8List, DataFailure>(ConnectionUnavailable()),
+      );
+    });
+  });
 }

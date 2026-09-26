@@ -2,6 +2,7 @@ import 'package:equatable/equatable.dart';
 
 import '../../items/logic/item.dart';
 import '../../items/logic/item_category.dart';
+import '../../members/logic/household.dart';
 import '../../members/logic/household_member.dart';
 import '../../purchases/logic/purchase.dart';
 import 'report_month.dart';
@@ -20,18 +21,19 @@ const String notItemisedLabel = 'Not itemised';
 
 const String unknownShopLabel = 'Unknown shop';
 
-/// Whoever paid without having a `users` document.
-const String unknownMemberLabel = 'Unknown member';
-
 /// One labelled amount in a report section.
 final class ReportRow extends Equatable {
-  const ReportRow({required this.label, required this.amount});
+  const ReportRow({required this.label, required this.amount, this.category});
 
   final String label;
   final double amount;
 
+  /// The stored category a category row stands for, which picks its icon.
+  /// Null for a shop, and for the rows no category accounts for.
+  final String? category;
+
   @override
-  List<Object?> get props => [label, amount];
+  List<Object?> get props => [label, amount, category];
 }
 
 /// What one member paid this month, against what an equal share would be.
@@ -81,6 +83,7 @@ final class SpendingReport extends Equatable {
     required this.byPerson,
     required this.byCategory,
     required this.byShop,
+    required this.purchases,
   });
 
   /// The first instant of the month this report covers.
@@ -102,6 +105,13 @@ final class SpendingReport extends Equatable {
   final List<MemberSpend> byPerson;
   final List<ReportRow> byCategory;
   final List<ReportRow> byShop;
+
+  /// The month's purchases, newest first.
+  final List<Purchase> purchases;
+
+  /// What each member's part of the month would be if it were split equally.
+  /// Zero without anyone to split it across.
+  double get equalShare => memberCount == 0 ? 0 : monthTotal / memberCount;
 
   /// Nothing was recorded this month. The month frame still renders, so the
   /// month can be changed.
@@ -126,6 +136,7 @@ final class SpendingReport extends Equatable {
     byPerson,
     byCategory,
     byShop,
+    purchases,
   ];
 }
 
@@ -168,7 +179,19 @@ SpendingReport buildSpendingReport({
     byPerson: _byPerson(inMonth, members, monthTotal),
     byCategory: _byCategory(inMonth, items, monthTotal),
     byShop: _byShop(inMonth),
+    purchases: _newestFirst(inMonth),
   );
+}
+
+/// Latest day first. Purchases on the same day keep the order they arrived
+/// in, since a day is all a purchase date records.
+List<Purchase> _newestFirst(List<Purchase> purchases) {
+  final indexed = purchases.indexed.toList()
+    ..sort((a, b) {
+      final byDate = b.$2.date.compareTo(a.$2.date);
+      return byDate != 0 ? byDate : a.$1.compareTo(b.$1);
+    });
+  return [for (final (_, purchase) in indexed) purchase];
 }
 
 List<MemberSpend> _byPerson(
@@ -209,7 +232,7 @@ List<MemberSpend> _byPerson(
     rows.add(
       MemberSpend(
         memberId: '',
-        displayName: unknownMemberLabel,
+        displayName: unknownMemberName,
         paid: strays,
         share: 0,
         hasShare: false,
@@ -228,6 +251,7 @@ List<ReportRow> _byCategory(
   final categoryByItemId = {for (final item in items) item.id: item.category};
 
   final totals = <String, double>{};
+  final categoryByLabel = <String, String>{};
   var itemised = 0.0;
 
   for (final purchase in purchases) {
@@ -235,6 +259,9 @@ List<ReportRow> _byCategory(
       itemised += line.lineTotal;
       final stored = normalizeCategory(categoryByItemId[line.itemId] ?? '');
       final label = stored.isEmpty ? uncategorisedLabel : categoryLabel(stored);
+      if (stored.isNotEmpty) {
+        categoryByLabel.putIfAbsent(label, () => stored);
+      }
       totals.update(
         label,
         (amount) => amount + line.lineTotal,
@@ -249,7 +276,11 @@ List<ReportRow> _byCategory(
 
   final rows = [
     for (final entry in totals.entries)
-      ReportRow(label: entry.key, amount: entry.value),
+      ReportRow(
+        label: entry.key,
+        amount: entry.value,
+        category: categoryByLabel[entry.key],
+      ),
   ]..sort(_byAmountThenLabel);
 
   if (uncategorised != null) {

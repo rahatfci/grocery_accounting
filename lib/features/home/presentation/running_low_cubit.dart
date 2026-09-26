@@ -57,8 +57,11 @@ class RunningLowCubit extends Cubit<RunningLowState> {
   }
 
   void _judge(List<Item> items) {
-    final low = runningLow(items, now: _clock());
-    emit(low.isEmpty ? const RunningLowNone() : RunningLowLoaded(low));
+    final now = _clock();
+    final low = runningLow(items, now: now);
+    emit(
+      low.isEmpty ? const RunningLowNone() : RunningLowLoaded(low, now: now),
+    );
   }
 
   /// A stream error must reach Home as a renderable state, never as an

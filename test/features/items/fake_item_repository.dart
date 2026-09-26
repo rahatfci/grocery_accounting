@@ -79,12 +79,44 @@ class FakeItemRepository implements ItemRepository {
 
   void emitError(Object error) => _controllers.last.addError(error);
 
+  /// Fails every watch, as Firestore does for each listener.
+  void emitErrorToAll(Object error) {
+    for (final controller in _controllers) {
+      controller.addError(error);
+    }
+  }
+
   @override
   Stream<List<Item>> watchItems() {
     final controller = StreamController<List<Item>>();
     _controllers.add(controller);
     if (initialItems case final items?) {
       controller.add(items);
+    }
+    return controller.stream;
+  }
+
+  /// One per `watchStockEvents()` call, keyed by the item asked about.
+  final eventControllers =
+      <
+        ({String itemId, StreamController<List<StockEventRecord>> controller})
+      >[];
+
+  /// When set, every new events watch reports this at once.
+  List<StockEventRecord>? initialEvents;
+
+  void emitEvents(List<StockEventRecord> events) =>
+      eventControllers.last.controller.add(events);
+
+  void emitEventsError(Object error) =>
+      eventControllers.last.controller.addError(error);
+
+  @override
+  Stream<List<StockEventRecord>> watchStockEvents(String itemId) {
+    final controller = StreamController<List<StockEventRecord>>();
+    eventControllers.add((itemId: itemId, controller: controller));
+    if (initialEvents case final events?) {
+      controller.add(events);
     }
     return controller.stream;
   }

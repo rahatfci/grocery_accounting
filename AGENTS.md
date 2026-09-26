@@ -27,8 +27,13 @@ Grocery Accounting, a Flutter app for tracking grocery spending.
 | State management | Bloc (`flutter_bloc`), DI via `get_it` + `injectable` |
 | Entry point | `lib/main.dart` |
 
-Theme tokens currently live inline in `lib/main.dart`: seed color `0xFF244F3D`
-and the `CenturyGothic` font family declared in `pubspec.yaml`.
+Theme tokens come from the Figma file's variables and live in
+`lib/core/theme/`: `app_colors.dart` (semantic colours, brand `0xFF244F3D`),
+`app_tokens.dart` (spacing, radii, shadows) and `app_theme.dart` (the text
+styles on the `CenturyGothic` family declared in `pubspec.yaml`, and the
+component themes). Shared components built from them are in
+`lib/core/widgets/`. Icons are Material Symbols Rounded from
+`material_symbols_icons`.
 
 ## Proportional engineering
 

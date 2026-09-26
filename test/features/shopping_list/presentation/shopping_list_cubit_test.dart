@@ -259,4 +259,43 @@ void main() {
     expect(entries.hasListener, isFalse);
     expect(items.hasListener, isFalse);
   });
+
+  group('addItem', () {
+    test('adds the item linked to it, as the signed-in member', () async {
+      final cubit = build();
+      entries.emitEntries(const []);
+      await pumpEventQueue();
+
+      await cubit.addItem(testItem(id: 'rice', name: 'Rice'));
+
+      final added = entries.added.single;
+      expect(added.text, 'Rice');
+      expect(added.itemId, 'rice');
+      expect(added.addedByUserId, testUser.uid);
+      expect(added.addedAt, now);
+      await cubit.close();
+    });
+
+    test('adds nothing when the item is already on the list', () async {
+      final cubit = build();
+      entries.emitEntries([testEntry(text: 'rice')]);
+      await pumpEventQueue();
+
+      final result = await cubit.addItem(testItem(id: 'rice', name: 'Rice'));
+
+      expect(result, isA<Ok<void, DataFailure>>());
+      expect(entries.added, isEmpty);
+      await cubit.close();
+    });
+
+    test('a refused add comes back as its failure', () async {
+      entries.addResult = const Err(PermissionDenied());
+      final cubit = build();
+
+      final result = await cubit.addItem(testItem());
+
+      expect(result, isA<Err<void, DataFailure>>());
+      await cubit.close();
+    });
+  });
 }

@@ -1,27 +1,41 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:material_symbols_icons/symbols.dart';
 
+import '../../../core/theme/app_colors.dart';
+import '../../../core/theme/app_tokens.dart';
+import '../../../core/widgets/app_button.dart';
+import '../../../core/widgets/app_card.dart';
+import '../../../core/widgets/bars.dart';
 import '../../../core/widgets/failure_message.dart';
+import '../../../core/widgets/form_controls.dart';
+import '../../../core/widgets/notes.dart';
+import '../../../core/widgets/section_header.dart';
 import '../../auth/logic/app_user.dart';
 import '../../items/data/item_repository.dart';
 import '../../items/logic/item.dart';
 import '../../items/logic/item_validation.dart';
 import '../../members/data/member_repository.dart';
-import '../../members/logic/household_member.dart';
 import '../../receipts/data/alias_repository.dart';
 import '../../receipts/data/receipt_picker.dart';
 import '../../receipts/data/receipt_reader.dart';
 import '../../receipts/data/receipt_store.dart';
 import '../../receipts/logic/receipt.dart';
-import '../../receipts/presentation/receipt_source_sheet.dart';
+import '../../receipts/presentation/receipt_photo_page.dart';
 import '../../shopping_list/data/shopping_list_repository.dart';
 import '../data/purchase_repository.dart';
 import '../logic/money.dart';
 import '../logic/purchase_draft.dart';
 import '../logic/purchase_validation.dart';
-import 'purchase_line_sheet.dart';
+import 'add_purchase_sheet.dart';
+import 'line_sheet.dart';
+import 'payer_picker.dart';
+import 'purchase_detail_page.dart';
+import 'purchase_saved_view.dart';
+import 'receipt_strip.dart';
 import 'record_purchase_cubit.dart';
 import 'record_purchase_state.dart';
+import 'review_line_rows.dart';
 
 /// How far back the date picker goes. Two years covers a forgotten receipt
 /// without offering a calendar nobody wants to scroll.
@@ -69,32 +83,46 @@ class RecordPurchaseView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text('Record a purchase')),
-      body: SafeArea(
-        child: BlocBuilder<RecordPurchaseCubit, RecordPurchaseState>(
-          builder: (context, state) => switch (state) {
-            RecordPurchaseLoading() => const Center(
-              child: CircularProgressIndicator(),
-            ),
-            RecordPurchaseFailure(:final failure) => _LoadFailure(
-              message: failure.message,
-            ),
-            RecordPurchaseReady(
-              :final draft,
-              :final items,
-              :final payers,
-              :final reading,
-            ) =>
-              _PurchaseForm(
-                draft: draft,
-                items: items,
-                payers: payers,
-                reading: reading,
-              ),
-          },
+    return BlocBuilder<RecordPurchaseCubit, RecordPurchaseState>(
+      builder: (context, state) => switch (state) {
+        RecordPurchaseLoading() => const _Frame(
+          body: Center(child: CircularProgressIndicator()),
         ),
+        RecordPurchaseFailure(:final failure) => _Frame(
+          body: LoadFailure(
+            message: failure.message,
+            onRetry: context.read<RecordPurchaseCubit>().retry,
+          ),
+        ),
+        final RecordPurchaseReady ready => _ReviewForm(state: ready),
+        RecordPurchaseSaved(:final summary) => PurchaseSavedView(
+          summary: summary,
+          onViewPurchase: () => Navigator.of(context).pushReplacement(
+            MaterialPageRoute<void>(
+              builder: (_) =>
+                  PurchaseDetailPage(purchaseId: summary.purchaseId),
+            ),
+          ),
+        ),
+      },
+    );
+  }
+}
+
+/// The review screen's bar around a state with nothing to review yet.
+class _Frame extends StatelessWidget {
+  const _Frame({required this.body});
+
+  final Widget body;
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: const AppTopBar(
+        title: 'Review purchase',
+        leading: TopBarLeading.close,
       ),
+      body: SafeArea(child: body),
     );
   }
 }
@@ -128,10 +156,9 @@ class _PickOnOpenState extends State<_PickOnOpen> {
       return;
     }
     switch (outcome) {
-      case ReceiptPicked(:final notice):
-        if (notice != null) {
-          messenger.showSnackBar(SnackBar(content: Text(notice)));
-        }
+      // What reading found, or did not, is on the receipt strip.
+      case ReceiptPicked():
+        break;
       case ReceiptPickCancelled():
         navigator.pop();
       case ReceiptPickRefused(:final message):
@@ -144,59 +171,16 @@ class _PickOnOpenState extends State<_PickOnOpen> {
   Widget build(BuildContext context) => widget.child;
 }
 
-class _LoadFailure extends StatelessWidget {
-  const _LoadFailure({required this.message});
+class _ReviewForm extends StatefulWidget {
+  const _ReviewForm({required this.state});
 
-  final String message;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 420),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                message,
-                style: theme.textTheme.bodyMedium,
-                textAlign: TextAlign.center,
-              ),
-              const SizedBox(height: 16),
-              OutlinedButton(
-                onPressed: () => context.read<RecordPurchaseCubit>().retry(),
-                child: const Text('Try again'),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _PurchaseForm extends StatefulWidget {
-  const _PurchaseForm({
-    required this.draft,
-    required this.items,
-    required this.payers,
-    required this.reading,
-  });
-
-  final PurchaseDraft draft;
-  final List<Item> items;
-  final List<HouseholdMember> payers;
-  final bool reading;
+  final RecordPurchaseReady state;
 
   @override
-  State<_PurchaseForm> createState() => _PurchaseFormState();
+  State<_ReviewForm> createState() => _ReviewFormState();
 }
 
-class _PurchaseFormState extends State<_PurchaseForm> {
+class _ReviewFormState extends State<_ReviewForm> {
   final _formKey = GlobalKey<FormState>();
   late final TextEditingController _shopController;
   late TextEditingController _totalController;
@@ -207,22 +191,24 @@ class _PurchaseFormState extends State<_PurchaseForm> {
 
   bool _saving = false;
 
-  /// Already user-facing text, from a validator or a mapped [DataFailure].
+  /// Already user-facing text, from a validator or a mapped `DataFailure`.
   String? _failure;
+
+  PurchaseDraft get _draft => widget.state.draft;
 
   /// The catalogue, plus the items this purchase has created so far, so a
   /// second line for a new item picks it rather than creating it twice.
   List<Item> get _pickableItems => <Item>{
-    ...widget.items,
-    for (final line in widget.draft.lines)
+    ...widget.state.items,
+    for (final line in _draft.lines)
       if (line.item case final item? when line.createsItem) item,
   }.toList();
 
   @override
   void initState() {
     super.initState();
-    _shopController = TextEditingController(text: widget.draft.shopName);
-    _totalController = TextEditingController(text: widget.draft.totalText);
+    _shopController = TextEditingController(text: _draft.shopName);
+    _totalController = TextEditingController(text: _draft.totalText);
   }
 
   /// A reading can fill the total in after the field was built. What the
@@ -232,10 +218,11 @@ class _PurchaseFormState extends State<_PurchaseForm> {
   /// the form would then flag every empty field at once. A new controller and
   /// field keep the form untouched.
   @override
-  void didUpdateWidget(_PurchaseForm oldWidget) {
+  void didUpdateWidget(_ReviewForm oldWidget) {
     super.didUpdateWidget(oldWidget);
-    final total = widget.draft.totalText;
-    if (total != oldWidget.draft.totalText && total != _totalController.text) {
+    final total = _draft.totalText;
+    if (total != oldWidget.state.draft.totalText &&
+        total != _totalController.text) {
       final previous = _totalController;
       _totalController = TextEditingController(text: total);
       _totalFieldVersion++;
@@ -264,7 +251,7 @@ class _PurchaseFormState extends State<_PurchaseForm> {
 
     final picked = await showDatePicker(
       context: context,
-      initialDate: DateUtils.dateOnly(widget.draft.date),
+      initialDate: DateUtils.dateOnly(_draft.date),
       firstDate: DateTime(today.year - _earliestPurchaseYears),
       // A purchase cannot have happened yet, so tomorrow is not offered.
       lastDate: today,
@@ -272,47 +259,70 @@ class _PurchaseFormState extends State<_PurchaseForm> {
 
     if (picked != null) {
       cubit.setDate(picked);
+      _onFieldChanged();
     }
   }
 
-  Future<void> _editLine({int? index}) async {
+  Future<void> _editLine([int? index]) async {
     final cubit = context.read<RecordPurchaseCubit>();
-    final existing = index == null ? null : widget.draft.lines[index];
+    final existing = index == null ? null : _draft.lines[index];
 
-    final line = await showModalBottomSheet<PurchaseDraftLine>(
-      context: context,
-      isScrollControlled: true,
-      builder: (_) => PurchaseLineSheet(items: _pickableItems, line: existing),
+    final result = await showLineSheet(
+      context,
+      items: _pickableItems,
+      line: existing,
     );
-
-    if (line == null) {
-      return;
-    }
-    if (index == null) {
-      cubit.addLine(line);
-    } else {
-      cubit.updateLine(index, line);
+    switch ((result, index)) {
+      case (null, _) || (LineRemoved(), null):
+        return;
+      case (LineChosen(:final line), null):
+        cubit.addLine(line);
+      case (LineChosen(:final line), final index?):
+        cubit.updateLine(index, line);
+      case (LineRemoved(), final index?):
+        cubit.removeLine(index);
     }
     _onFieldChanged();
   }
 
-  Future<void> _attachReceipt() async {
+  void _removeLine(int index) {
+    context.read<RecordPurchaseCubit>().removeLine(index);
+    _onFieldChanged();
+  }
+
+  Future<void> _pickReceipt() async {
     final cubit = context.read<RecordPurchaseCubit>();
     final messenger = ScaffoldMessenger.of(context);
 
-    final source = await showReceiptSourceSheet(context);
+    final source = switch (await showAddPurchaseSheet(
+      context,
+      photoOnly: true,
+    )) {
+      PurchaseStart.camera => ReceiptSource.camera,
+      PurchaseStart.gallery => ReceiptSource.gallery,
+      PurchaseStart.manual || null => null,
+    };
     if (source == null) {
       return;
     }
-    final outcome = await cubit.pickReceipt(source);
-    final message = switch (outcome) {
-      ReceiptPickRefused(:final message) => message,
-      ReceiptPicked(:final notice) => notice,
-      ReceiptPickCancelled() => null,
-    };
-    if (message != null) {
+    // What reading found, or did not, is on the receipt strip.
+    if (await cubit.pickReceipt(source) case ReceiptPickRefused(
+      :final message,
+    )) {
       messenger.showSnackBar(SnackBar(content: Text(message)));
     }
+  }
+
+  void _openPhoto(ReceiptPhoto photo) {
+    final cubit = context.read<RecordPurchaseCubit>();
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => ReceiptPhotoPage(
+          bytes: photo.bytes,
+          onRemove: _saving ? null : cubit.removeReceipt,
+        ),
+      ),
+    );
   }
 
   Future<void> _save() async {
@@ -323,282 +333,336 @@ class _PurchaseFormState extends State<_PurchaseForm> {
     FocusScope.of(context).unfocus();
 
     final cubit = context.read<RecordPurchaseCubit>();
-    final navigator = Navigator.of(context);
-    final messenger = ScaffoldMessenger.of(context);
     setState(() {
       _saving = true;
       _failure = null;
     });
 
-    final outcome = await cubit.commit();
-
-    if (!mounted) {
-      return;
-    }
-    switch (outcome) {
-      case CommitSucceeded(:final receiptSkipped):
-        navigator.pop();
-        if (receiptSkipped != null) {
-          messenger.showSnackBar(
-            SnackBar(
-              content: Text(
-                'Saved without the photo. ${receiptSkipped.message}',
-              ),
-            ),
-          );
-        }
-      case CommitInvalid(:final message):
-        setState(() {
-          _saving = false;
-          _failure = message;
-        });
-      case CommitFailed(:final failure):
-        setState(() {
-          _saving = false;
-          _failure = failure.message;
-        });
+    // On success the cubit moves on to what the save did, and this form goes.
+    final message = switch (await cubit.commit()) {
+      CommitSucceeded() => null,
+      CommitInvalid(:final message) => message,
+      CommitFailed(:final failure) => failure.message,
+    };
+    if (mounted && message != null) {
+      setState(() {
+        _saving = false;
+        _failure = message;
+      });
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    final cubit = context.read<RecordPurchaseCubit>();
-    final theme = Theme.of(context);
-    final draft = widget.draft;
+    final state = widget.state;
+    final draft = _draft;
+    final reading = state.reading;
+    final total = parseDecimal(draft.totalText);
+    final failure = _failure;
 
-    return Center(
-      child: ConstrainedBox(
-        // Phone stays one column; a wide window centres the form instead of
-        // stretching it across the screen.
-        constraints: const BoxConstraints(maxWidth: 560),
-        child: Form(
-          key: _formKey,
-          autovalidateMode: AutovalidateMode.onUserInteraction,
-          child: ListView(
-            padding: const EdgeInsets.fromLTRB(24, 24, 24, 32),
-            children: [
-              _DateField(date: draft.date, onTap: _saving ? null : _pickDate),
-              const SizedBox(height: 16),
-              TextFormField(
-                controller: _shopController,
-                enabled: !_saving,
+    return Scaffold(
+      appBar: AppTopBar(
+        title: 'Review purchase',
+        leading: TopBarLeading.close,
+        actions: [
+          if (draft.receipt case final photo?)
+            IconButton(
+              icon: const Icon(Symbols.image_rounded),
+              tooltip: 'View receipt photo',
+              onPressed: () => _openPhoto(photo),
+            ),
+        ],
+      ),
+      body: SafeArea(
+        bottom: false,
+        child: Center(
+          child: ConstrainedBox(
+            // A wide window centres the review rather than stretching it.
+            constraints: const BoxConstraints(maxWidth: 560),
+            child: Form(
+              key: _formKey,
+              autovalidateMode: AutovalidateMode.onUserInteraction,
+              child: ListView(
+                padding: const EdgeInsets.fromLTRB(
+                  AppSpace.page,
+                  AppSpace.s8,
+                  AppSpace.page,
+                  AppSpace.s24,
+                ),
+                children: [
+                  if (reading) ...[
+                    ReadingCard(photo: draft.receipt),
+                    const SizedBox(height: AppSpace.s20),
+                  ],
+                  _DetailsCard(
+                    state: state,
+                    saving: _saving,
+                    shopController: _shopController,
+                    totalController: _totalController,
+                    totalFieldKey: ValueKey(_totalFieldVersion),
+                    onFieldChanged: _onFieldChanged,
+                    onPickDate: _pickDate,
+                    onPickReceipt: _pickReceipt,
+                  ),
+                  const SizedBox(height: AppSpace.s20),
+                  if (reading) ...[
+                    const SectionHeader(title: 'Lines'),
+                    const SizedBox(height: AppSpace.s12),
+                    const LinesSkeleton(),
+                  ] else
+                    ..._lineSections(draft),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+      bottomNavigationBar: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          if (failure != null)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(
+                AppSpace.page,
+                AppSpace.s8,
+                AppSpace.page,
+                AppSpace.s8,
+              ),
+              child: FailureMessage(message: failure),
+            ),
+          ActionBar(
+            summaryLabel: 'Total',
+            summaryValue: reading || total == null ? '...' : formatEuro(total),
+            child: AppButton(
+              label: 'Save purchase',
+              expand: true,
+              busy: _saving,
+              onPressed: reading ? null : _save,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Unmatched lines first, since they are the ones that need the member,
+  /// then everything that restocks, then the lines against the total.
+  List<Widget> _lineSections(PurchaseDraft draft) {
+    final editable = !_saving;
+    final unmatched = [
+      for (final (index, line) in draft.lines.indexed)
+        if (!line.isMatched) (index, line),
+    ];
+    final matched = [
+      for (final (index, line) in draft.lines.indexed)
+        if (line.isMatched) (index, line),
+    ];
+    final total = parseDecimal(draft.totalText);
+    final text = Theme.of(context).textTheme;
+
+    return [
+      if (unmatched.isNotEmpty) ...[
+        SectionHeader(title: 'To match', count: unmatched.length),
+        const SizedBox(height: AppSpace.s8),
+        Text(
+          'Unmatched lines are saved as spend only and restock nothing. '
+          'Match them once and the app remembers.',
+          style: text.bodySmall?.copyWith(color: AppColors.textSecondary),
+        ),
+        const SizedBox(height: AppSpace.s8),
+        RowGroup(
+          children: [
+            for (final (index, line) in unmatched)
+              RemovableLine(
+                line: line,
+                onRemove: editable ? () => _removeLine(index) : null,
+                child: UnmatchedLineRow(
+                  line: line,
+                  onMatch: editable ? () => _editLine(index) : null,
+                ),
+              ),
+          ],
+        ),
+        const SizedBox(height: AppSpace.s20),
+      ],
+      SectionHeader(
+        title: unmatched.isEmpty ? 'Lines' : 'Matched',
+        count: matched.isEmpty ? null : matched.length,
+        actionLabel: 'Add line',
+        onAction: editable ? _editLine : null,
+      ),
+      const SizedBox(height: AppSpace.s12),
+      RowGroup(
+        children: [
+          if (matched.isEmpty)
+            NoteRow(
+              icon: Symbols.receipt_long_rounded,
+              text: unmatched.isEmpty
+                  ? 'No lines yet. The spend is recorded either way.'
+                  : 'Nothing matched yet. Matched lines restock the pantry.',
+            ),
+          for (final (index, line) in matched)
+            RemovableLine(
+              line: line,
+              onRemove: editable ? () => _removeLine(index) : null,
+              child: MatchedLineRow(
+                line: line,
+                onTap: editable ? () => _editLine(index) : null,
+              ),
+            ),
+        ],
+      ),
+      if (draft.lines.isNotEmpty && total != null && total > 0) ...[
+        const SizedBox(height: AppSpace.s20),
+        LinesTotalCard(linesTotal: draft.linesTotal, total: total),
+      ],
+    ];
+  }
+}
+
+/// Where the purchase was, when, for how much and who paid, with the receipt
+/// strip on top. While the photo is read, the fields it fills stand in grey.
+class _DetailsCard extends StatelessWidget {
+  const _DetailsCard({
+    required this.state,
+    required this.saving,
+    required this.shopController,
+    required this.totalController,
+    required this.totalFieldKey,
+    required this.onFieldChanged,
+    required this.onPickDate,
+    required this.onPickReceipt,
+  });
+
+  final RecordPurchaseReady state;
+  final bool saving;
+  final TextEditingController shopController;
+  final TextEditingController totalController;
+  final Key totalFieldKey;
+  final VoidCallback onFieldChanged;
+  final VoidCallback onPickDate;
+  final VoidCallback onPickReceipt;
+
+  @override
+  Widget build(BuildContext context) {
+    final cubit = context.read<RecordPurchaseCubit>();
+    final draft = state.draft;
+    final reading = state.reading;
+
+    return AppCard(
+      padding: const EdgeInsets.all(AppSpace.s16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          if (!reading) ...[
+            ReceiptStrip(
+              photo: draft.receipt,
+              readResult: state.readResult,
+              readFailed: state.readFailed,
+              onPick: saving ? null : onPickReceipt,
+            ),
+            const SizedBox(height: AppSpace.s16),
+            const Divider(height: 1),
+            const SizedBox(height: AppSpace.s16),
+          ],
+          if (reading)
+            const _FieldSkeleton()
+          else
+            LabeledField(
+              label: 'Shop',
+              child: TextFormField(
+                controller: shopController,
+                enabled: !saving,
                 decoration: const InputDecoration(
-                  labelText: 'Shop',
-                  border: OutlineInputBorder(),
+                  hintText: 'Where you shopped',
+                  prefixIcon: Icon(Symbols.storefront_rounded, size: 20),
                 ),
                 textCapitalization: TextCapitalization.words,
                 textInputAction: TextInputAction.next,
                 validator: validateShopName,
                 onChanged: (value) {
                   cubit.setShopName(value);
-                  _onFieldChanged();
+                  onFieldChanged();
                 },
               ),
-              const SizedBox(height: 16),
-              TextFormField(
-                key: ValueKey(_totalFieldVersion),
-                controller: _totalController,
-                enabled: !_saving,
-                decoration: const InputDecoration(
-                  labelText: 'Total',
-                  border: OutlineInputBorder(),
-                  prefixText: '€ ',
-                ),
-                keyboardType: const TextInputType.numberWithOptions(
-                  decimal: true,
-                ),
-                textInputAction: TextInputAction.next,
-                validator: validateTotal,
-                onChanged: (value) {
-                  cubit.setTotalText(value);
-                  _onFieldChanged();
-                },
-              ),
-              const SizedBox(height: 16),
-              DropdownButtonFormField<String>(
-                initialValue: draft.paidByUserId.isEmpty
-                    ? null
-                    : draft.paidByUserId,
-                isExpanded: true,
-                decoration: const InputDecoration(
-                  labelText: 'Paid by',
-                  border: OutlineInputBorder(),
-                ),
-                items: [
-                  for (final payer in widget.payers)
-                    DropdownMenuItem(
-                      value: payer.id,
-                      child: Text(
-                        payer.displayName,
-                        overflow: TextOverflow.ellipsis,
+            ),
+          const SizedBox(height: AppSpace.s16),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: reading
+                    ? const _FieldSkeleton()
+                    : LabeledField(
+                        label: 'Date',
+                        child: _DateField(
+                          date: draft.date,
+                          onTap: saving ? null : onPickDate,
+                        ),
                       ),
-                    ),
-                ],
-                validator: (value) => value == null ? 'Choose who paid' : null,
-                onChanged: _saving
-                    ? null
-                    : (payer) {
-                        if (payer != null) {
-                          cubit.setPaidByUserId(payer);
-                          _onFieldChanged();
-                        }
-                      },
               ),
-              const SizedBox(height: 24),
-              _ReceiptSection(
-                receipt: draft.receipt,
-                reading: widget.reading,
-                onAttach: _saving ? null : _attachReceipt,
-                onRemove: _saving ? null : cubit.removeReceipt,
-              ),
-              const SizedBox(height: 24),
-              Row(
-                children: [
-                  Expanded(
-                    child: Text('Lines', style: theme.textTheme.titleMedium),
-                  ),
-                  TextButton.icon(
-                    onPressed: _saving ? null : _editLine,
-                    icon: const Icon(Icons.add),
-                    label: const Text('Add line'),
-                  ),
-                ],
-              ),
-              if (draft.lines.isEmpty)
-                Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 8),
-                  child: Text(
-                    'No lines yet. The spend is recorded either way.',
-                    style: theme.textTheme.bodyMedium,
-                  ),
-                )
-              else ...[
-                for (final (index, line) in draft.lines.indexed)
-                  _LineRow(
-                    line: line,
-                    onTap: _saving ? null : () => _editLine(index: index),
-                    onRemove: _saving
-                        ? null
-                        : () {
-                            cubit.removeLine(index);
-                            _onFieldChanged();
+              const SizedBox(width: AppSpace.s12),
+              Expanded(
+                child: reading
+                    ? const _FieldSkeleton()
+                    : LabeledField(
+                        label: 'Total',
+                        child: TextFormField(
+                          key: totalFieldKey,
+                          controller: totalController,
+                          enabled: !saving,
+                          decoration: const InputDecoration(
+                            prefixText: '€ ',
+                            errorMaxLines: 3,
+                          ),
+                          keyboardType: const TextInputType.numberWithOptions(
+                            decimal: true,
+                          ),
+                          textInputAction: TextInputAction.done,
+                          validator: validateTotal,
+                          onChanged: (value) {
+                            cubit.setTotalText(value);
+                            onFieldChanged();
                           },
-                  ),
-                const SizedBox(height: 8),
-                _LinesTotal(draft: draft),
-              ],
-              const SizedBox(height: 24),
-              if (_failure case final String message) ...[
-                FailureMessage(message: message),
-                const SizedBox(height: 16),
-              ],
-              _SaveButton(isSaving: _saving, onPressed: _save),
+                        ),
+                      ),
+              ),
             ],
           ),
-        ),
+          const SizedBox(height: AppSpace.s16),
+          PayerPicker(
+            household: state.household,
+            selected: draft.paidByUserId,
+            onChanged: saving
+                ? null
+                : (payer) {
+                    cubit.setPaidByUserId(payer);
+                    onFieldChanged();
+                  },
+          ),
+        ],
       ),
     );
   }
 }
 
-class _ReceiptSection extends StatelessWidget {
-  const _ReceiptSection({
-    required this.receipt,
-    required this.reading,
-    required this.onAttach,
-    required this.onRemove,
-  });
-
-  final ReceiptPhoto? receipt;
-  final bool reading;
-  final VoidCallback? onAttach;
-  final VoidCallback? onRemove;
+class _FieldSkeleton extends StatelessWidget {
+  const _FieldSkeleton();
 
   @override
   Widget build(BuildContext context) {
-    final photo = receipt;
-    if (photo == null) {
-      return Align(
-        alignment: AlignmentDirectional.centerStart,
-        child: OutlinedButton.icon(
-          onPressed: onAttach,
-          icon: const Icon(Icons.add_a_photo_outlined),
-          label: const Text('Attach receipt photo'),
-        ),
-      );
-    }
-
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        ClipRRect(
-          borderRadius: BorderRadius.circular(8),
-          child: Image.memory(
-            photo.bytes,
-            height: 120,
-            width: 90,
-            fit: BoxFit.cover,
-            // Decoded at thumbnail size, not the full 2000px photo.
-            cacheHeight: 360,
-            semanticLabel: 'Receipt photo',
-            gaplessPlayback: true,
-            // A photo that will not decode still shows that one is attached.
-            errorBuilder: (_, _, _) => const SizedBox(
-              height: 120,
-              width: 90,
-              child: Icon(Icons.broken_image_outlined),
-            ),
+    return const ExcludeSemantics(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Align(
+            alignment: AlignmentDirectional.centerStart,
+            child: SkeletonBox(width: 56, height: 10),
           ),
-        ),
-        const SizedBox(width: 16),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'Receipt photo',
-                style: Theme.of(context).textTheme.titleMedium,
-              ),
-              const SizedBox(height: 8),
-              if (reading) const _ReadingProgress(),
-              TextButton.icon(
-                onPressed: onAttach,
-                icon: const Icon(Icons.refresh),
-                label: const Text('Replace'),
-              ),
-              TextButton.icon(
-                onPressed: onRemove,
-                icon: const Icon(Icons.delete_outline),
-                label: const Text('Remove'),
-              ),
-            ],
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-class _ReadingProgress extends StatelessWidget {
-  const _ReadingProgress();
-
-  @override
-  Widget build(BuildContext context) {
-    return Semantics(
-      liveRegion: true,
-      child: Padding(
-        padding: const EdgeInsets.only(bottom: 8),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'Reading receipt',
-              style: Theme.of(context).textTheme.bodySmall,
-            ),
-            const SizedBox(height: 4),
-            const LinearProgressIndicator(),
-          ],
-        ),
+          SizedBox(height: AppSpace.s6),
+          SkeletonBox(height: 52, radius: AppRadius.md),
+        ],
       ),
     );
   }
@@ -612,113 +676,28 @@ class _DateField extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return InkWell(
-      onTap: onTap,
-      child: InputDecorator(
-        decoration: const InputDecoration(
-          labelText: 'Date',
-          border: OutlineInputBorder(),
-          suffixIcon: Icon(Icons.calendar_today_outlined),
-        ),
-        child: Text(formatPurchaseDate(date)),
-      ),
-    );
-  }
-}
-
-class _LineRow extends StatelessWidget {
-  const _LineRow({
-    required this.line,
-    required this.onTap,
-    required this.onRemove,
-  });
-
-  final PurchaseDraftLine line;
-  final VoidCallback? onTap;
-  final VoidCallback? onRemove;
-
-  @override
-  Widget build(BuildContext context) {
-    final quantity = '${formatDecimal(line.quantity)} ${line.unit.label}';
-
-    final colors = Theme.of(context).colorScheme;
-
-    return ListTile(
-      contentPadding: EdgeInsets.zero,
-      onTap: onTap,
-      // An unmatched line saves as spend only and restocks nothing, so it must
-      // stand out before it is committed by accident.
-      leading: line.isMatched
-          ? null
-          : Icon(
-              Icons.link_off,
-              color: colors.error,
-              semanticLabel: 'Not matched',
-            ),
-      title: Text(line.label, maxLines: 1, overflow: TextOverflow.ellipsis),
-      // A line that will create an item is worth seeing before it is
-      // committed, because nothing else in the app will announce it.
-      subtitle: line.isMatched
-          ? Text(line.createsItem ? '$quantity - new item' : quantity)
-          : Text(
-              'Not matched - $quantity',
-              style: TextStyle(color: colors.error),
-            ),
-      trailing: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text(formatEuro(line.lineTotal)),
-          IconButton(
-            icon: const Icon(Icons.close),
-            tooltip: 'Remove line',
-            onPressed: onRemove,
+    return Semantics(
+      button: true,
+      hint: 'Change the date',
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(AppRadius.md),
+        child: InputDecorator(
+          // The text fields' own style, so this field is exactly as tall as
+          // the total beside it.
+          baseStyle: Theme.of(context).textTheme.bodyLarge,
+          decoration: InputDecoration(
+            enabled: onTap != null,
+            suffixIcon: const Icon(Symbols.calendar_today_rounded, size: 20),
           ),
-        ],
+          child: Text(
+            formatPurchaseDate(date),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: Theme.of(context).textTheme.bodyLarge,
+          ),
+        ),
       ),
-    );
-  }
-}
-
-/// The lines against the receipt total. They are allowed to differ: discounts,
-/// deposits and unpriced lines are all normal, so this is a hint and never a
-/// reason to refuse the purchase.
-class _LinesTotal extends StatelessWidget {
-  const _LinesTotal({required this.draft});
-
-  final PurchaseDraft draft;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final total = parseDecimal(draft.totalText);
-    final lines = formatEuro(draft.linesTotal);
-
-    return Text(
-      total == null ? 'Lines $lines' : 'Lines $lines of ${formatEuro(total)}',
-      style: theme.textTheme.bodySmall,
-    );
-  }
-}
-
-class _SaveButton extends StatelessWidget {
-  const _SaveButton({required this.isSaving, required this.onPressed});
-
-  final bool isSaving;
-  final VoidCallback onPressed;
-
-  @override
-  Widget build(BuildContext context) {
-    return FilledButton(
-      onPressed: isSaving ? null : onPressed,
-      style: FilledButton.styleFrom(
-        padding: const EdgeInsets.symmetric(vertical: 16),
-      ),
-      child: isSaving
-          ? const SizedBox.square(
-              dimension: 20,
-              child: CircularProgressIndicator(strokeWidth: 2),
-            )
-          : const Text('Save purchase'),
     );
   }
 }

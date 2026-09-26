@@ -1,4 +1,5 @@
 import '../../items/logic/item.dart';
+import '../../items/logic/running_low.dart';
 import 'shopping_entry.dart';
 
 final _whitespace = RegExp(r'\s+');
@@ -56,3 +57,24 @@ Set<String> entriesClearedBy(
         entry.id,
   };
 }
+
+/// The entry already on the list for [item]: linked to it, or naming it.
+ShoppingEntry? entryFor(Item item, Iterable<ShoppingEntry> entries) {
+  final name = normalizeEntryText(item.name);
+  for (final entry in entries) {
+    if ((item.id.isNotEmpty && entry.itemId == item.id) ||
+        (name.isNotEmpty && normalizeEntryText(entry.text) == name)) {
+      return entry;
+    }
+  }
+  return null;
+}
+
+/// The running low items nobody has put on the list yet, in the same order.
+List<LowStockItem> lowNotOnList(
+  Iterable<LowStockItem> low,
+  Iterable<ShoppingEntry> entries,
+) => [
+  for (final item in low)
+    if (entryFor(item.item, entries) == null) item,
+];

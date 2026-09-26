@@ -22,6 +22,10 @@ enum StockEventType {
   /// Stored in Firestore. Stable, so the enum can be renamed without a
   /// migration.
   final String key;
+
+  /// The type [key] names, or null for a key this build does not know.
+  static StockEventType? fromKey(String key) =>
+      values.where((type) => type.key == key).firstOrNull;
 }
 
 /// One change to an item's stock, as the member entered it.
@@ -51,6 +55,27 @@ final class StockEvent extends Equatable {
 
   @override
   List<Object?> get props => [itemId, type, quantity, unit, userId, note];
+}
+
+/// A stock event as it was recorded: the audit trail an item's history is
+/// read from.
+final class StockEventRecord extends Equatable {
+  const StockEventRecord({
+    required this.id,
+    required this.event,
+    required this.date,
+  });
+
+  /// The `consumptionEvents` document id.
+  final String id;
+
+  final StockEvent event;
+
+  /// When it was recorded, which is also the item's new `baselineDate`.
+  final DateTime date;
+
+  @override
+  List<Object?> get props => [id, event, date];
 }
 
 /// The `stockAtBaseline` to write after [event], or null when [event.unit]

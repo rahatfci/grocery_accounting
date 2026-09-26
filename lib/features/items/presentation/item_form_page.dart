@@ -1,10 +1,18 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:material_symbols_icons/symbols.dart';
 
 import '../../../core/data_failure.dart';
 import '../../../core/refusal_window.dart';
 import '../../../core/result.dart';
+import '../../../core/theme/app_colors.dart';
+import '../../../core/theme/app_tokens.dart';
+import '../../../core/widgets/app_button.dart';
+import '../../../core/widgets/app_card.dart';
+import '../../../core/widgets/bars.dart';
 import '../../../core/widgets/failure_message.dart';
+import '../../../core/widgets/form_controls.dart';
+import '../../../core/widgets/notes.dart';
 import '../logic/item.dart';
 import '../logic/item_category.dart';
 import '../logic/item_unit.dart';
@@ -70,6 +78,9 @@ class _ItemFormPageState extends State<ItemFormPage> {
 
   bool get _isEditing => widget.item != null;
 
+  /// Only a weighed item converts pieces: see `convertToItemUnit`.
+  bool get _weighed => _unit == ItemUnit.kg || _unit == ItemUnit.g;
+
   @override
   void initState() {
     super.initState();
@@ -90,8 +101,8 @@ class _ItemFormPageState extends State<ItemFormPage> {
 
     final category = item?.category;
     // An edited item's own category is always offered, even if its stored
-    // text never normalized to one of the derived options, so the dropdown
-    // always has a value to show.
+    // text never normalized to one of the derived options, so the picker
+    // always has a chip to show selected.
     _categoryOptions = [
       ...widget.categories,
       if (category != null && !widget.categories.contains(category)) category,
@@ -116,7 +127,7 @@ class _ItemFormPageState extends State<ItemFormPage> {
     }
   }
 
-  void _onCategoryChanged(Object? selection) {
+  void _onCategoryChanged(Object selection) {
     setState(() => _categorySelection = selection);
     _onFieldChanged();
   }
@@ -221,7 +232,7 @@ class _ItemFormPageState extends State<ItemFormPage> {
       builder: (dialogContext) => AlertDialog(
         title: const Text('Delete this item?'),
         content: Text(
-          '${item.name} will be removed from the catalogue. '
+          '${item.name} will be removed from the pantry. '
           'This cannot be undone.',
         ),
         actions: [
@@ -231,6 +242,7 @@ class _ItemFormPageState extends State<ItemFormPage> {
           ),
           TextButton(
             onPressed: () => Navigator.of(dialogContext).pop(true),
+            style: TextButton.styleFrom(foregroundColor: AppColors.negative),
             child: const Text('Delete'),
           ),
         ],
@@ -272,7 +284,11 @@ class _ItemFormPageState extends State<ItemFormPage> {
       name: _nameController.text.trim(),
       unit: _unit,
       category: category,
-      avgPieceWeight: parseDecimal(_avgPieceWeightController.text),
+      // Pieces only convert into a weight, so the weight is dropped along
+      // with the field for an item counted in pieces or litres.
+      avgPieceWeight: _weighed
+          ? parseDecimal(_avgPieceWeightController.text)
+          : null,
       dailyUsage: parseDecimal(_dailyUsageController.text) ?? 0,
       lowThreshold: parseDecimal(_lowThresholdController.text) ?? 0,
       // The baseline pair belongs to the stock features. An edit carries the
@@ -287,191 +303,295 @@ class _ItemFormPageState extends State<ItemFormPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: Text(_isEditing ? 'Edit item' : 'New item'),
+      appBar: AppTopBar(
+        title: _isEditing ? 'Edit item' : 'New item',
+        leading: TopBarLeading.close,
         actions: [
           // Only when editing: there is nothing to delete on a create.
           if (_isEditing)
             IconButton(
-              icon: const Icon(Icons.delete_outline),
+              icon: const Icon(Symbols.delete_rounded),
               tooltip: 'Delete item',
               onPressed: _saving ? null : _confirmDelete,
             ),
         ],
       ),
-      body: SafeArea(
-        child: Center(
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.all(24),
-            child: ConstrainedBox(
-              // Phone stays one column; a wide window centres the form instead
-              // of stretching the fields across the screen.
-              constraints: const BoxConstraints(maxWidth: 420),
-              child: Form(
-                key: _formKey,
-                autovalidateMode: AutovalidateMode.onUserInteraction,
+      body: Form(
+        key: _formKey,
+        autovalidateMode: AutovalidateMode.onUserInteraction,
+        child: ListView(
+          padding: const EdgeInsets.fromLTRB(
+            AppSpace.page,
+            AppSpace.s8,
+            AppSpace.page,
+            AppSpace.s24,
+          ),
+          children: [
+            Center(
+              child: ConstrainedBox(
+                // Phone stays one column; a wide window centres the form
+                // instead of stretching the fields across the screen.
+                constraints: const BoxConstraints(maxWidth: 560),
                 child: Column(
-                  mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    TextFormField(
-                      controller: _nameController,
-                      enabled: !_saving,
-                      decoration: const InputDecoration(
-                        labelText: 'Name',
-                        border: OutlineInputBorder(),
-                      ),
-                      textCapitalization: TextCapitalization.sentences,
-                      textInputAction: TextInputAction.next,
-                      validator: validateName,
-                      onChanged: _onFieldChanged,
-                    ),
-                    const SizedBox(height: 16),
-                    DropdownButtonFormField<ItemUnit>(
-                      initialValue: _unit,
-                      decoration: const InputDecoration(
-                        labelText: 'Unit',
-                        border: OutlineInputBorder(),
-                      ),
-                      items: [
-                        for (final unit in ItemUnit.values)
-                          DropdownMenuItem(
-                            value: unit,
-                            child: Text(unit.label),
-                          ),
-                      ],
-                      onChanged: _saving
-                          ? null
-                          : (unit) {
-                              if (unit != null) {
-                                setState(() => _unit = unit);
-                                _onFieldChanged();
-                              }
-                            },
-                    ),
-                    const SizedBox(height: 16),
-                    DropdownButtonFormField<Object>(
-                      initialValue: _categorySelection,
-                      decoration: const InputDecoration(
-                        labelText: 'Category',
-                        border: OutlineInputBorder(),
-                      ),
-                      // Nothing is preselected: a category is a real choice,
-                      // not something to inherit from whatever sorts first.
-                      // No hint either, because the label already names the
-                      // field and a hint reading "Choose a category" would be
-                      // indistinguishable from the validator's error.
-                      items: [
-                        for (final category in _categoryOptions)
-                          DropdownMenuItem<Object>(
-                            value: category,
-                            child: Text(categoryLabel(category)),
-                          ),
-                        DropdownMenuItem<Object>(
-                          value: _addCategoryOption,
-                          child: const Text('Add category'),
-                        ),
-                      ],
-                      validator: (value) =>
-                          value == null ? validateCategory(null) : null,
-                      onChanged: _saving ? null : _onCategoryChanged,
-                    ),
-                    if (_addingCategory) ...[
-                      const SizedBox(height: 16),
-                      TextFormField(
-                        controller: _newCategoryController,
+                    LabeledField(
+                      label: 'Name',
+                      child: TextFormField(
+                        controller: _nameController,
                         enabled: !_saving,
-                        decoration: const InputDecoration(
-                          labelText: 'New category',
-                          border: OutlineInputBorder(),
-                        ),
                         textCapitalization: TextCapitalization.sentences,
-                        validator: _validateNewCategory,
+                        textInputAction: TextInputAction.next,
+                        validator: validateName,
                         onChanged: _onFieldChanged,
                       ),
+                    ),
+                    const SizedBox(height: AppSpace.s20),
+                    LabeledField(
+                      label: 'Measured in',
+                      child: SegmentedPicker<ItemUnit>(
+                        segments: [
+                          for (final unit in ItemUnit.values)
+                            Segment(value: unit, label: unit.label),
+                        ],
+                        selected: _unit,
+                        onChanged: _saving
+                            ? null
+                            : (unit) {
+                                setState(() => _unit = unit);
+                                _onFieldChanged();
+                              },
+                      ),
+                    ),
+                    const SizedBox(height: AppSpace.s20),
+                    _CategoryField(
+                      options: _categoryOptions,
+                      selection: _categorySelection,
+                      addOption: _addCategoryOption,
+                      enabled: !_saving,
+                      onChanged: _onCategoryChanged,
+                    ),
+                    if (_addingCategory) ...[
+                      const SizedBox(height: AppSpace.s12),
+                      LabeledField(
+                        label: 'New category',
+                        child: TextFormField(
+                          controller: _newCategoryController,
+                          enabled: !_saving,
+                          autofocus: true,
+                          textCapitalization: TextCapitalization.sentences,
+                          validator: _validateNewCategory,
+                          onChanged: _onFieldChanged,
+                        ),
+                      ),
                     ],
-                    const SizedBox(height: 16),
-                    TextFormField(
-                      controller: _avgPieceWeightController,
+                    const SizedBox(height: AppSpace.s20),
+                    _StockRules(
+                      unit: _unit,
+                      weighed: _weighed,
                       enabled: !_saving,
-                      decoration: const InputDecoration(
-                        labelText: 'Average piece weight (optional)',
-                        border: OutlineInputBorder(),
-                      ),
-                      keyboardType: const TextInputType.numberWithOptions(
-                        decimal: true,
-                      ),
-                      textInputAction: TextInputAction.next,
-                      validator: validateOptionalWeight,
+                      dailyUsage: _dailyUsageController,
+                      lowThreshold: _lowThresholdController,
+                      avgPieceWeight: _avgPieceWeightController,
                       onChanged: _onFieldChanged,
-                    ),
-                    const SizedBox(height: 16),
-                    TextFormField(
-                      controller: _dailyUsageController,
-                      enabled: !_saving,
-                      decoration: const InputDecoration(
-                        labelText: 'Daily usage',
-                        border: OutlineInputBorder(),
-                      ),
-                      keyboardType: const TextInputType.numberWithOptions(
-                        decimal: true,
-                      ),
-                      textInputAction: TextInputAction.next,
-                      validator: validateRequiredAmount,
-                      onChanged: _onFieldChanged,
-                    ),
-                    const SizedBox(height: 16),
-                    TextFormField(
-                      controller: _lowThresholdController,
-                      enabled: !_saving,
-                      decoration: const InputDecoration(
-                        labelText: 'Low threshold',
-                        border: OutlineInputBorder(),
-                      ),
-                      keyboardType: const TextInputType.numberWithOptions(
-                        decimal: true,
-                      ),
-                      textInputAction: TextInputAction.done,
-                      validator: validateRequiredAmount,
-                      onChanged: _onFieldChanged,
-                      onFieldSubmitted: (_) => _save(),
+                      onSubmitted: _save,
                     ),
                     if (_failure case final failure?) ...[
-                      const SizedBox(height: 16),
+                      const SizedBox(height: AppSpace.s16),
                       FailureMessage(message: failure.message),
                     ],
-                    const SizedBox(height: 24),
-                    _SaveButton(isSaving: _saving, onPressed: _save),
                   ],
                 ),
               ),
             ),
-          ),
+          ],
+        ),
+      ),
+      bottomNavigationBar: ActionBar(
+        child: AppButton(
+          label: 'Save item',
+          expand: true,
+          busy: _saving,
+          onPressed: _save,
         ),
       ),
     );
   }
 }
 
-class _SaveButton extends StatelessWidget {
-  const _SaveButton({required this.isSaving, required this.onPressed});
+/// The category chips, as a form field so an unchosen category fails
+/// validation with the rest of the form.
+class _CategoryField extends StatelessWidget {
+  const _CategoryField({
+    required this.options,
+    required this.selection,
+    required this.addOption,
+    required this.enabled,
+    required this.onChanged,
+  });
 
-  final bool isSaving;
-  final VoidCallback onPressed;
+  final List<String> options;
+  final Object? selection;
+  final Object addOption;
+  final bool enabled;
+  final ValueChanged<Object> onChanged;
 
   @override
   Widget build(BuildContext context) {
-    return FilledButton(
-      onPressed: isSaving ? null : onPressed,
-      style: FilledButton.styleFrom(
-        padding: const EdgeInsets.symmetric(vertical: 16),
+    // Nothing is preselected: a category is a real choice, not something to
+    // inherit from whatever sorts first.
+    return FormField<Object>(
+      initialValue: selection,
+      validator: (value) => value == null ? validateCategory(null) : null,
+      builder: (field) {
+        void choose(Object value) {
+          onChanged(value);
+          field.didChange(value);
+        }
+
+        final error = field.errorText;
+        return LabeledField(
+          label: 'Category',
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Wrap(
+                spacing: AppSpace.s8,
+                runSpacing: AppSpace.s8,
+                children: [
+                  for (final category in options)
+                    ChoicePill(
+                      label: categoryLabel(category),
+                      selected: category == selection,
+                      onTap: enabled ? () => choose(category) : null,
+                    ),
+                  ChoicePill(
+                    label: 'New category',
+                    icon: Symbols.add_rounded,
+                    selected: identical(selection, addOption),
+                    onTap: enabled ? () => choose(addOption) : null,
+                  ),
+                ],
+              ),
+              if (error != null)
+                Padding(
+                  padding: const EdgeInsets.only(top: AppSpace.s6),
+                  child: Text(
+                    error,
+                    style: Theme.of(
+                      context,
+                    ).textTheme.bodySmall?.copyWith(color: AppColors.negative),
+                  ),
+                ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+}
+
+/// The numbers that make an item a staple: how fast it goes, when it counts
+/// as low, and what one piece weighs.
+class _StockRules extends StatelessWidget {
+  const _StockRules({
+    required this.unit,
+    required this.weighed,
+    required this.enabled,
+    required this.dailyUsage,
+    required this.lowThreshold,
+    required this.avgPieceWeight,
+    required this.onChanged,
+    required this.onSubmitted,
+  });
+
+  final ItemUnit unit;
+  final bool weighed;
+  final bool enabled;
+  final TextEditingController dailyUsage;
+  final TextEditingController lowThreshold;
+  final TextEditingController avgPieceWeight;
+  final ValueChanged<String> onChanged;
+  final VoidCallback onSubmitted;
+
+  @override
+  Widget build(BuildContext context) {
+    final text = Theme.of(context).textTheme;
+    const decimal = TextInputType.numberWithOptions(decimal: true);
+
+    return AppCard(
+      padding: const EdgeInsets.all(AppSpace.s16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text('Stock rules', style: text.titleMedium),
+          const SizedBox(height: AppSpace.s2),
+          Text(
+            'They drive running low and the run-out reminders.',
+            style: text.bodySmall?.copyWith(color: AppColors.textTertiary),
+          ),
+          const SizedBox(height: AppSpace.s16),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: LabeledField(
+                  label: 'Daily usage',
+                  helper: '${unit.label} a day',
+                  child: TextFormField(
+                    controller: dailyUsage,
+                    enabled: enabled,
+                    keyboardType: decimal,
+                    textInputAction: TextInputAction.next,
+                    validator: validateRequiredAmount,
+                    onChanged: onChanged,
+                  ),
+                ),
+              ),
+              const SizedBox(width: AppSpace.s12),
+              Expanded(
+                child: LabeledField(
+                  label: 'Low below',
+                  helper: unit.label,
+                  child: TextFormField(
+                    controller: lowThreshold,
+                    enabled: enabled,
+                    keyboardType: decimal,
+                    textInputAction: weighed
+                        ? TextInputAction.next
+                        : TextInputAction.done,
+                    validator: validateRequiredAmount,
+                    onChanged: onChanged,
+                    onFieldSubmitted: weighed ? null : (_) => onSubmitted(),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          if (weighed) ...[
+            const SizedBox(height: AppSpace.s16),
+            LabeledField(
+              label: 'Average piece weight (optional)',
+              helper:
+                  '${unit.label} for one piece, so “1 wedge” converts into '
+                  '${unit.label}',
+              child: TextFormField(
+                controller: avgPieceWeight,
+                enabled: enabled,
+                keyboardType: decimal,
+                textInputAction: TextInputAction.done,
+                validator: validateOptionalWeight,
+                onChanged: onChanged,
+                onFieldSubmitted: (_) => onSubmitted(),
+              ),
+            ),
+          ],
+          const SizedBox(height: AppSpace.s16),
+          const InfoNote(
+            text: 'Leave daily usage at 0 for anything that is not a staple.',
+          ),
+        ],
       ),
-      child: isSaving
-          ? const SizedBox.square(
-              dimension: 20,
-              child: CircularProgressIndicator(strokeWidth: 2),
-            )
-          : const Text('Save'),
     );
   }
 }

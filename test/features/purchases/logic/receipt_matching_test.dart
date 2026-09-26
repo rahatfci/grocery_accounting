@@ -148,6 +148,7 @@ void main() {
       expect(line.unit, ItemUnit.pcs);
       expect(line.lineTotal, 2.99);
       expect(line.scannedText, 'Uova  Fresche');
+      expect(line.learned, isTrue, reason: 'an earlier purchase taught it');
     });
 
     test('keeps a quantity the receipt printed', () {
@@ -176,6 +177,7 @@ void main() {
       expect(line.isMatched, isFalse);
       expect(line.scannedText, 'LATTE');
       expect(line.quantity, 1);
+      expect(line.learned, isFalse);
     });
 
     test('ignores an alias whose item was deleted', () {
@@ -224,5 +226,23 @@ void main() {
     ], today: DateTime(2026, 9, 24));
 
     expect(reading.lines.map((l) => l.quantityRead), [false, true]);
+  });
+
+  group('suggestedItemName', () {
+    test('drops sizes and counts and makes the case readable', () {
+      expect(suggestedItemName('POMODORI PELATI 400G'), 'Pomodori pelati');
+      expect(suggestedItemName('UOVA FRESCHE X6'), 'Uova fresche');
+      expect(suggestedItemName('OLIO EVO 1L'), 'Olio evo');
+      expect(suggestedItemName('MELE GOLDEN 0,850 KG'), 'Mele golden');
+    });
+
+    test('keeps a word that only contains a digit', () {
+      expect(suggestedItemName('COCA COLA ZERO'), 'Coca cola zero');
+      expect(suggestedItemName('7UP 33CL'), '7up');
+    });
+
+    test('is empty when nothing but sizes was printed', () {
+      expect(suggestedItemName('  500G  '), '');
+    });
   });
 }

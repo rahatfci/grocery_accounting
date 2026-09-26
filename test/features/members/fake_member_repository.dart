@@ -23,6 +23,10 @@ class FakeMemberRepository implements MemberRepository {
   Result<void, DataFailure> upsertResult = const Ok(null);
   Object? upsertThrows;
 
+  /// When set, every new watch reports this at once, so a screen that only
+  /// needs the household to have answered can settle.
+  List<HouseholdMember>? initialMembers;
+
   int get watchCalls => _controllers.length;
 
   bool get hasListener =>
@@ -33,10 +37,20 @@ class FakeMemberRepository implements MemberRepository {
 
   void emitError(Object error) => _controllers.last.addError(error);
 
+  /// Reports [members] to every watch, as Firestore does for each listener.
+  void emitMembersToAll(List<HouseholdMember> members) {
+    for (final controller in _controllers) {
+      controller.add(members);
+    }
+  }
+
   @override
   Stream<List<HouseholdMember>> watchMembers() {
     final controller = StreamController<List<HouseholdMember>>();
     _controllers.add(controller);
+    if (initialMembers case final members?) {
+      controller.add(members);
+    }
     return controller.stream;
   }
 

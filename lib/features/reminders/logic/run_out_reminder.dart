@@ -45,18 +45,8 @@ List<RunOutReminder> runOutReminders(
 }) {
   final planned = [
     for (final (index, item) in items.indexed)
-      if (runOutAt(item) case final runsOut? when runsOut.isAfter(now))
-        if (_reminderTime(runsOut) case final remindAt
-            when remindAt.isAfter(now))
-          (
-            index: index,
-            reminder: RunOutReminder(
-              itemId: item.id,
-              itemName: item.name,
-              runsOutAt: runsOut,
-              remindAt: remindAt,
-            ),
-          ),
+      if (reminderFor(item, now: now) case final reminder?)
+        (index: index, reminder: reminder),
   ];
 
   // `List.sort` is not stable, so the input position breaks the last tie.
@@ -71,6 +61,26 @@ List<RunOutReminder> runOutReminders(
     return byName != 0 ? byName : a.index - b.index;
   });
   return [for (final entry in planned.take(maxRunOutReminders)) entry.reminder];
+}
+
+/// The reminder [item] should have at [now], or null when it has none: it is
+/// not a staple, its run-out date is too far off, or the reminder time has
+/// already passed.
+RunOutReminder? reminderFor(Item item, {required DateTime now}) {
+  final runsOut = runOutAt(item);
+  if (runsOut == null || !runsOut.isAfter(now)) {
+    return null;
+  }
+  final remindAt = _reminderTime(runsOut);
+  if (!remindAt.isAfter(now)) {
+    return null;
+  }
+  return RunOutReminder(
+    itemId: item.id,
+    itemName: item.name,
+    runsOutAt: runsOut,
+    remindAt: remindAt,
+  );
 }
 
 /// 09:00 local on the calendar day before [runsOutAt].
