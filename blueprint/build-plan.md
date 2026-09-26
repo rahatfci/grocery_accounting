@@ -36,3 +36,18 @@ order it runs in. The review screen is the feature; the scanner prefills it.
 
 - [x] 12. **CSV export** - export a month of purchases and share it.
 - [x] 13. **Large screen and web layout pass** - responsive reports and tables, and the manual entry path for receipts on web where ML Kit is unavailable.
+
+## Milestone 7 - Mobile redesign
+
+Implements the Figma design (project plan, section 7) on the features above.
+Mostly presentation; items 18, 19 and 20 add small pieces of data.
+
+- [ ] 14. **Design tokens and theme** - `AppColors` and the theme from the Figma variables: light surfaces, navy text, brand green, positive, negative and warning colours, text styles on CenturyGothic 400 and 700, radii and spacing. Light top bars replace the green app bar.
+- [ ] 15. **App shell** - bottom navigation with Home, Pantry, List and Spending, and an Account screen opened from the Home avatar with the household and sign out.
+- [ ] 16. **Home** - month glance, scan hero with take photo, gallery and manual entry, running low rows with add to list, shopping list preview, and the first-run empty state.
+- [ ] 17. **Review screen** - receipt strip, payer chips, unmatched lines grouped on top in red, the match line sheet with item search and the learning note, and the new item sheet.
+- [ ] 18. **Saved summary** - what a save did: spend, items restocked and created, list entries cleared, lines learned, spend-only lines, photo upload state. The commit outcome reports these counts.
+- [ ] 19. **Pantry** - grouped list with filter chips and a status per item; item detail with the run-out date, add to shopping list, and stock history read from `consumptionEvents`.
+- [ ] 20. **Purchase history** - a month's purchases grouped by day, and a read-only purchase detail with its lines and the receipt photo.
+- [ ] 21. **Spending** - month total and change, who paid against the equal share, by category, by shop, and recent purchases.
+- [ ] 22. **Shopping list tab** - the full list with add, a shared indicator, and running-low suggestions added with one tap.

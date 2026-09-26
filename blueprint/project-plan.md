@@ -189,28 +189,78 @@ subscriptions. If it ever goes public this section gets rewritten.
 
 ## 7. UI/UX - How should this look and feel?
 
-Existing theme tokens, already in `lib/main.dart`, stay:
+The mobile UI is designed in Figma and is the reference for the Flutter
+implementation: <https://www.figma.com/design/uALv1vykqOmzhUvG8FsHxk/Grocery-Accounting>.
+The Screens page holds 19 phone screens at 390x844 with a clickable prototype
+starting at the splash; the Components page holds the component library; the
+variables and styles carry the tokens. Light theme only.
 
-- Seed colour `0xFF244F3D`, a deep green
-- `CenturyGothic`, with `CenturyGothicBold` at weight 700
-- Material 3
+**Visual language.** Clean and minimal: light surfaces (`#F5F6F8` background,
+white cards), dark navy text (`#0F1D33`), and the existing seed colour
+`0xFF244F3D` as the brand green for primary actions. Colour follows meaning for
+the household:
 
-**Home screen is built around one action.** The receipt capture button is the
-largest, most obvious thing on it. Below it: what is running low, and the
-shopping list. Reports are deliberately one level down, because they are read
-occasionally and the receipt is photographed weekly.
+- Green (`#1A7F55`) is in the member's or the household's favour: paid over
+  the equal share, stock added, spend down on last month.
+- Red (`#CF3434`) is against: paid under the share, running low or out, an
+  unmatched receipt line, spend up on last month.
+- Amber (`#9A5B00`) is soon: runs out within days, a photo waiting to upload.
+
+The Figma variables (`Primitives`, `Color`, `Spacing`, `Radius`) map one to
+one to an `AppColors` class and the theme; each variable notes its Flutter name.
+
+**Type.** `CenturyGothic` stays, at the two bundled weights only, 400 and 700.
+Century Gothic is not available in Figma, so the file uses Urbanist as a
+stand-in with the same geometric single-storey a and g. Its 13 text styles
+each name the Material 3 `TextTheme` role they map to.
+
+**Icons.** Material Symbols Rounded in Figma, `Icons.*_outlined` in Flutter,
+or `Symbols.*` from `material_symbols_icons` for an exact match. Each icon
+component names its Flutter icon.
+
+**Navigation.** A bottom navigation bar with four tabs: Home, Pantry, List and
+Spending. Account opens from the avatar on Home and holds the household and
+sign out. Pushed screens, such as review, item detail and purchase detail,
+hide the bar.
+
+**Home screen is built around one action.** The scan hero is the largest,
+most obvious thing on it, with take photo, choose from gallery and enter
+manually. Above it sits one line of money: the month's spend, the change on
+last month and the member's balance against their share, linking to Spending.
+Below it: what is running low, and the shopping list. The full report stays one
+level down, because it is read occasionally and the receipt is photographed
+weekly.
 
 **The review screen is the most important screen in the app.** It is where OCR
 guesses get corrected, unknown receipt lines get mapped to items, and missing
-quantities get filled in. It has to be fast to correct, and it has to make
-unmatched lines visually obvious so they are not confirmed by accident.
+quantities get filled in. Unmatched lines are grouped at the top under "To
+match", red with a left accent and a Match button, so they are never confirmed
+by accident. Who paid is a row of one-tap member chips. Matching happens on a
+sheet with item search, create new item, quantity and unit, and a note that the
+mapping will be remembered.
+
+**Saving shows what the one action did.** After a save, a summary lists the
+spend recorded, items restocked and created, shopping list entries cleared,
+receipt lines learned, lines saved as spend only, and whether the photo is
+still waiting for signal.
+
+**Pantry, list and spending.** The pantry is grouped by category with filter
+chips and a status per item. Item detail shows the derived stock, the run-out
+date, log use, adjust and recount, and the stock history that explains the
+number. The shopping list is its own tab; running-low items can be added to it
+with one tap, but nothing is ever added automatically. Spending shows the month
+total and change, each member against the equal share, spend by category and by
+shop, and a purchase history where each purchase opens with its lines and its
+receipt photo.
 
 **Responsive from the start, not retrofitted.** Phone is one column and thumb
 reachable. Web and tablet use the width for tables and multi column reports
 rather than stretching phone layouts.
 
-Language and formatting are Italian context: EUR, decimal comma on receipts,
-`dd/MM/yyyy` dates. Interface language is English.
+Language and formatting are Italian context: EUR as `formatEuro` writes it
+(`47,85 €`), decimal comma on receipts, `dd/MM/yyyy` dates. Interface language
+is English. Stock quantities print with a decimal point today (`0.3 kg`);
+switching them to a comma is a small follow-up if wanted.
 
 ## 8. Deployment - Where and how will this ship?
 
