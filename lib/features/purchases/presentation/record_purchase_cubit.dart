@@ -9,6 +9,7 @@ import '../../auth/logic/app_user.dart';
 import '../../items/data/item_repository.dart';
 import '../../items/logic/item.dart';
 import '../../members/data/member_repository.dart';
+import '../../members/logic/household.dart';
 import '../../members/logic/household_member.dart';
 import '../../receipts/data/alias_repository.dart';
 import '../../receipts/data/receipt_picker.dart';
@@ -21,7 +22,9 @@ import '../../shopping_list/data/shopping_list_repository.dart';
 import '../../shopping_list/logic/shopping_entry.dart';
 import '../../shopping_list/logic/shopping_match.dart';
 import '../data/purchase_repository.dart';
+import '../logic/money.dart';
 import '../logic/purchase_draft.dart';
+import '../logic/purchase_summary.dart';
 import '../logic/receipt_matching.dart';
 import '../logic/purchase_validation.dart';
 import 'record_purchase_state.dart';
@@ -62,6 +65,15 @@ class RecordPurchaseCubit extends Cubit<RecordPurchaseState> {
 
   /// True while a photo is being read, so the screen can say so.
   bool _reading = false;
+
+  /// What reading the attached photo found, for the receipt strip. Cleared
+  /// whenever the photo changes.
+  ReceiptReading? _readResult;
+  bool _readFailed = false;
+
+  /// Set once the purchase is written. The collections stop mattering then,
+  /// and a late report from one must not bring the form back.
+  bool _saved = false;
 
   /// Set once the member picks a date, so a reading never overrides it.
   bool _dateChosen = false;
@@ -117,10 +129,17 @@ class RecordPurchaseCubit extends Cubit<RecordPurchaseState> {
     _update(_draft.copyWith(lines: lines));
   }
 
-  void attachReceipt(ReceiptPhoto photo) =>
-      _update(_draft.copyWith(receipt: photo));
+  void attachReceipt(ReceiptPhoto photo) {
+    _readResult = null;
+    _readFailed = false;
+    _update(_draft.copyWith(receipt: photo));
+  }
 
-  void removeReceipt() => _update(_draft.copyWith(receipt: null));
+  void removeReceipt() {
+    _readResult = null;
+    _readFailed = false;
+    _update(_draft.copyWith(receipt: null));
+  }
 
   /// Asks the camera or gallery for a photo and attaches it, replacing any
   /// photo already attached. On a draft nothing has been entered into yet,
@@ -162,6 +181,9 @@ class RecordPurchaseCubit extends Cubit<RecordPurchaseState> {
     switch (result) {
       case Err(:final error):
         addError(error.cause, error.stackTrace);
+        if (identical(_draft.receipt, photo)) {
+          _readFailed = true;
+        }
         _emitReady();
         return error.message;
       case Ok(value: final reading):
@@ -170,6 +192,7 @@ class RecordPurchaseCubit extends Cubit<RecordPurchaseState> {
           _emitReady();
           return null;
         }
+        _readResult = reading;
         final applied = _apply(reading);
         _update(applied ?? _draft);
         return applied == null
@@ -185,7 +208,7 @@ class RecordPurchaseCubit extends Cubit<RecordPurchaseState> {
 
     final total = reading.total;
     if (total != null && draft.totalText.trim().isEmpty) {
-      draft = draft.copyWith(totalText: formatReadAmount(total));
+      draft = draft.copyWith(totalText: formatAmountInput(total));
       changed = true;
     }
     final date = reading.date;
@@ -235,6 +258,9 @@ class RecordPurchaseCubit extends Cubit<RecordPurchaseState> {
 
     final draft = _draft;
     final purchaseId = _purchases.newPurchaseId();
+    final cleared = entriesClearedBy(_entries, [
+      for (final line in draft.lines) ?line.item,
+    ]);
     var kept = false;
     DataFailure? receiptSkipped;
 
@@ -260,9 +286,7 @@ class RecordPurchaseCubit extends Cubit<RecordPurchaseState> {
           .commit(
             draft,
             now: _now(),
-            clearEntryIds: entriesClearedBy(_entries, [
-              for (final line in draft.lines) ?line.item,
-            ]),
+            clearEntryIds: cleared,
             purchaseId: purchaseId,
             receiptImagePath: pathAtCommit,
           )
@@ -272,6 +296,28 @@ class RecordPurchaseCubit extends Cubit<RecordPurchaseState> {
         case Ok():
           if (kept) {
             receiptSkipped = await _storeReceipt(purchaseId);
+          }
+          final photo = switch (draft.receipt) {
+            null => SavedPhoto.none,
+            _ when receiptSkipped != null => SavedPhoto.notSaved,
+            _ when _receipts.queuesOffline => SavedPhoto.uploading,
+            _ => SavedPhoto.uploaded,
+          };
+          _showSaved(
+            summarizePurchase(
+              draft,
+              purchaseId: purchaseId,
+              payerName: Household.of(
+                _household ?? const [],
+                _currentUser,
+              ).nameOf(draft.paidByUserId),
+              cleared: cleared.length,
+              photo: photo,
+              photoProblem: receiptSkipped?.message,
+            ),
+          );
+          if (photo == SavedPhoto.uploading) {
+            unawaited(_followUpload(purchaseId));
           }
           return CommitSucceeded(receiptSkipped: receiptSkipped);
         case Err(:final error):
@@ -303,7 +349,6 @@ class RecordPurchaseCubit extends Cubit<RecordPurchaseState> {
       return error;
     }
     if (_receipts.queuesOffline) {
-      unawaited(_flushReceipts());
       return null;
     }
     // Web: the photo is stored now, so the purchase may point at it.
@@ -316,9 +361,17 @@ class RecordPurchaseCubit extends Cubit<RecordPurchaseState> {
     };
   }
 
-  /// Starts the upload the purchase screen does not wait for. A failure
-  /// leaves the photo queued, and Home flushes again later.
-  Future<void> _flushReceipts() async {
+  /// Stops following the collections and shows what the save did.
+  void _showSaved(PurchaseSummary summary) {
+    _saved = true;
+    _cancelSubscriptions();
+    emit(RecordPurchaseSaved(summary));
+  }
+
+  /// Runs the upload the summary does not wait for, then says whether the
+  /// photo made it or is waiting for signal. A failure leaves the photo
+  /// queued, and the shell flushes again when the app is next resumed.
+  Future<void> _followUpload(String purchaseId) async {
     try {
       await _receipts.flush();
     } catch (error, stackTrace) {
@@ -326,13 +379,28 @@ class RecordPurchaseCubit extends Cubit<RecordPurchaseState> {
         addError(error, stackTrace);
       }
     }
+    final queued = await _receipts.isQueued(purchaseId);
+    final state = this.state;
+    if (!isClosed && state is RecordPurchaseSaved) {
+      emit(
+        RecordPurchaseSaved(
+          state.summary.withPhoto(
+            queued ? SavedPhoto.waiting : SavedPhoto.uploaded,
+          ),
+        ),
+      );
+    }
   }
 
-  void _subscribe() {
+  void _cancelSubscriptions() {
     _itemsSubscription?.cancel();
     _membersSubscription?.cancel();
     _shoppingListSubscription?.cancel();
     _aliasesSubscription?.cancel();
+  }
+
+  void _subscribe() {
+    _cancelSubscriptions();
     _catalogue = null;
     _household = null;
     _entries = const [];
@@ -380,15 +448,17 @@ class RecordPurchaseCubit extends Cubit<RecordPurchaseState> {
   void _emitReady() {
     final items = _catalogue;
     final members = _household;
-    if (items == null || members == null) {
+    if (_saved || isClosed || items == null || members == null) {
       return;
     }
     emit(
       RecordPurchaseReady(
         draft: _draft,
         items: items,
-        payers: payerOptions(members, _currentUser),
+        household: Household.of(members, _currentUser),
         reading: _reading,
+        readResult: _readResult,
+        readFailed: _readFailed,
       ),
     );
   }
@@ -406,15 +476,7 @@ class RecordPurchaseCubit extends Cubit<RecordPurchaseState> {
 
   @override
   Future<void> close() {
-    _itemsSubscription?.cancel();
-    _membersSubscription?.cancel();
-    _shoppingListSubscription?.cancel();
-    _aliasesSubscription?.cancel();
+    _cancelSubscriptions();
     return super.close();
   }
 }
-
-/// A read amount as the total field shows it: two decimals and a decimal
-/// comma, the way the receipt printed it.
-String formatReadAmount(double amount) =>
-    amount.toStringAsFixed(2).replaceAll('.', ',');

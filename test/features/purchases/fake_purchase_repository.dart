@@ -76,6 +76,10 @@ class FakePurchaseRepository implements PurchaseRepository {
   /// can observe the saving state.
   Completer<void>? writeGate;
 
+  /// When set, every new window reports this at once, so a screen that only
+  /// needs its month to have answered can settle.
+  List<Purchase>? initialPurchases;
+
   int get watchWindowCalls => _windowControllers.length;
 
   bool get hasWindowListener =>
@@ -87,6 +91,21 @@ class FakePurchaseRepository implements PurchaseRepository {
   void emitPurchasesError(Object error) =>
       _windowControllers.last.addError(error);
 
+  /// Fails every open window, whichever screen opened it.
+  void emitPurchasesErrorToAll(Object error) {
+    for (final controller in _windowControllers) {
+      controller.addError(error);
+    }
+  }
+
+  /// Reports [purchases] to every open window, as Firestore does for each
+  /// listener.
+  void emitPurchasesToAll(List<Purchase> purchases) {
+    for (final controller in _windowControllers) {
+      controller.add(purchases);
+    }
+  }
+
   @override
   Stream<List<Purchase>> watchPurchasesBetween({
     required DateTime from,
@@ -95,6 +114,14 @@ class FakePurchaseRepository implements PurchaseRepository {
     windows.add((from: from, toExclusive: toExclusive));
     final controller = StreamController<List<Purchase>>();
     _windowControllers.add(controller);
+    if (initialPurchases case final purchases?) {
+      controller.add([
+        for (final purchase in purchases)
+          if (!purchase.date.isBefore(from) &&
+              purchase.date.isBefore(toExclusive))
+            purchase,
+      ]);
+    }
     return controller.stream;
   }
 
@@ -117,6 +144,55 @@ class FakePurchaseRepository implements PurchaseRepository {
       throw thrown;
     }
     return commitResult;
+  }
+
+  /// One per `watchPurchasesWithItem()` call.
+  final itemControllers =
+      <({String itemId, StreamController<List<Purchase>> controller})>[];
+
+  /// When set, every new item watch reports this at once.
+  List<Purchase>? initialItemPurchases;
+
+  void emitItemPurchases(List<Purchase> purchases) =>
+      itemControllers.last.controller.add(purchases);
+
+  @override
+  Stream<List<Purchase>> watchPurchasesWithItem(String itemId) {
+    final controller = StreamController<List<Purchase>>();
+    itemControllers.add((itemId: itemId, controller: controller));
+    if (initialItemPurchases case final purchases?) {
+      controller.add([
+        for (final purchase in purchases)
+          if (purchase.itemIds.contains(itemId)) purchase,
+      ]);
+    }
+    return controller.stream;
+  }
+
+  /// One per `watchPurchase()` call.
+  final purchaseControllers =
+      <({String purchaseId, StreamController<Purchase?> controller})>[];
+
+  /// What a new single-purchase watch reports at once, looked up by id.
+  Map<String, Purchase> purchasesById = const {};
+
+  /// When true, a new single-purchase watch reports nothing until told.
+  bool holdPurchase = false;
+
+  void emitPurchase(Purchase? purchase) =>
+      purchaseControllers.last.controller.add(purchase);
+
+  void emitPurchaseError(Object error) =>
+      purchaseControllers.last.controller.addError(error);
+
+  @override
+  Stream<Purchase?> watchPurchase(String purchaseId) {
+    final controller = StreamController<Purchase?>();
+    purchaseControllers.add((purchaseId: purchaseId, controller: controller));
+    if (!holdPurchase) {
+      controller.add(purchasesById[purchaseId]);
+    }
+    return controller.stream;
   }
 
   @override

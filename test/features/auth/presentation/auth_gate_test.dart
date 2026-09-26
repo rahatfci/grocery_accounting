@@ -7,19 +7,22 @@ import 'package:grocery_accounting/features/auth/presentation/auth_cubit.dart';
 import 'package:grocery_accounting/features/auth/presentation/auth_gate.dart';
 import 'package:grocery_accounting/features/auth/presentation/auth_state.dart';
 import 'package:grocery_accounting/features/auth/presentation/sign_in_page.dart';
-import 'package:grocery_accounting/features/home/presentation/home_page.dart';
+import 'package:grocery_accounting/features/auth/presentation/splash_view.dart';
 import 'package:grocery_accounting/features/items/data/item_repository.dart';
 import 'package:grocery_accounting/features/members/data/member_repository.dart';
+import 'package:grocery_accounting/features/purchases/data/purchase_repository.dart';
 import 'package:grocery_accounting/features/reminders/data/run_out_notifier.dart';
 import 'package:grocery_accounting/features/receipts/data/alias_repository.dart';
 import 'package:grocery_accounting/features/receipts/data/receipt_picker.dart';
 import 'package:grocery_accounting/features/receipts/data/receipt_reader.dart';
 import 'package:grocery_accounting/features/receipts/data/receipt_store.dart';
 import 'package:grocery_accounting/features/reports/data/csv_sharer.dart';
+import 'package:grocery_accounting/features/shell/presentation/app_shell.dart';
 import 'package:grocery_accounting/features/shopping_list/data/shopping_list_repository.dart';
 
 import '../../items/fake_item_repository.dart';
 import '../../members/fake_member_repository.dart';
+import '../../purchases/fake_purchase_repository.dart';
 import '../../reminders/fake_run_out_notifier.dart';
 import '../../receipts/fake_receipts.dart';
 import '../../reports/fake_csv_sharer.dart';
@@ -31,6 +34,9 @@ List<RepositoryProvider<Object>> _gateProviders(FakeMemberRepository members) =>
       RepositoryProvider<MemberRepository>.value(value: members),
       RepositoryProvider<ItemRepository>.value(
         value: FakeItemRepository()..initialItems = const [],
+      ),
+      RepositoryProvider<PurchaseRepository>.value(
+        value: FakePurchaseRepository()..initialPurchases = const [],
       ),
       RepositoryProvider<RunOutNotifier>.value(value: FakeRunOutNotifier()),
       RepositoryProvider<ShoppingListRepository>.value(
@@ -50,8 +56,8 @@ Future<void> _pumpGate(
 ) async {
   await tester.pumpWidget(
     MaterialApp(
-      // Home watches the catalogue for running low and run-out reminders, and
-      // the shopping list, as soon as it mounts.
+      // The shell watches the catalogue, the household, the shopping list and
+      // the month's purchases as soon as it mounts.
       home: MultiRepositoryProvider(
         providers: _gateProviders(members),
         child: BlocProvider(
@@ -77,9 +83,9 @@ void main() {
   ) async {
     await _pumpGate(tester, repository, members);
 
-    expect(find.byType(CircularProgressIndicator), findsOneWidget);
+    expect(find.byType(SplashView), findsOneWidget);
     expect(find.byType(SignInPage), findsNothing);
-    expect(find.byType(HomePage), findsNothing);
+    expect(find.byType(AppShell), findsNothing);
   });
 
   testWidgets('no session shows sign in', (tester) async {
@@ -97,8 +103,8 @@ void main() {
     repository.emitAuthState(testUser);
     await tester.pumpAndSettle();
 
-    expect(find.byType(HomePage), findsOneWidget);
-    expect(find.text('rahat@example.com'), findsOneWidget);
+    expect(find.byType(AppShell), findsOneWidget);
+    expect(find.text('Rahat'), findsOneWidget);
   });
 
   testWidgets('signing out returns to sign in', (tester) async {
@@ -106,8 +112,13 @@ void main() {
     repository.emitAuthState(testUser);
     await tester.pumpAndSettle();
 
-    await tester.tap(find.byTooltip('Sign out'));
+    await tester.tap(find.byTooltip('Account'));
     await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('Sign out'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Sign out'));
+    // The button spins until the auth stream reports the sign out.
+    await tester.pump();
     expect(repository.signOutCalls, 1);
 
     // Firebase drives the sign out through the auth stream, exactly as it
@@ -189,7 +200,7 @@ void main() {
     repository.emitAuthState(testUser);
     await tester.pumpAndSettle();
 
-    expect(find.byType(HomePage), findsOneWidget);
+    expect(find.byType(AppShell), findsOneWidget);
   });
 
   testWidgets('a mirror write that throws does not break the session', (
@@ -201,6 +212,6 @@ void main() {
     repository.emitAuthState(testUser);
     await tester.pumpAndSettle();
 
-    expect(find.byType(HomePage), findsOneWidget);
+    expect(find.byType(AppShell), findsOneWidget);
   });
 }

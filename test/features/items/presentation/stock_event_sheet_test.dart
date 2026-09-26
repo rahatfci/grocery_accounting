@@ -5,6 +5,8 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:grocery_accounting/core/data_failure.dart';
 import 'package:grocery_accounting/core/result.dart';
+import 'package:grocery_accounting/core/theme/app_theme.dart';
+import 'package:grocery_accounting/core/widgets/form_controls.dart';
 import 'package:grocery_accounting/features/items/logic/item.dart';
 import 'package:grocery_accounting/features/items/logic/item_unit.dart';
 import 'package:grocery_accounting/features/items/logic/stock_event.dart';
@@ -23,8 +25,12 @@ Future<void> _pumpSheet(
   required StockEventType type,
   Item? item,
 }) async {
+  tester.view.physicalSize = const Size(390, 1000);
+  tester.view.devicePixelRatio = 1;
+  addTearDown(tester.view.reset);
   await tester.pumpWidget(
     MaterialApp(
+      theme: AppTheme.light,
       home: BlocProvider(
         // Eager, so the cubit is listening before a test emits items.
         lazy: false,
@@ -42,10 +48,14 @@ Future<void> _pumpSheet(
   );
 }
 
-Finder _field(String label) => find.widgetWithText(TextFormField, label);
+/// The text field under the label [label].
+Finder _field(String label) => find.descendant(
+  of: find.widgetWithText(LabeledField, label),
+  matching: find.byType(TextFormField),
+);
 
 Future<void> _save(WidgetTester tester) async {
-  await tester.tap(find.widgetWithText(FilledButton, 'Save'));
+  await tester.tap(find.byType(FilledButton));
   await tester.pump();
 }
 
@@ -60,6 +70,7 @@ void main() {
     await _pumpSheet(tester, repository, type: StockEventType.consumed);
 
     expect(find.text('Log use'), findsOneWidget);
+    expect(find.text('Save use'), findsOneWidget);
     await tester.enterText(_field('Amount used'), '0,5');
     await tester.enterText(_field('Note (optional)'), '  Risotto  ');
     await _save(tester);
@@ -152,7 +163,7 @@ void main() {
   ) async {
     await _pumpSheet(tester, repository, type: StockEventType.consumed);
 
-    expect(find.byType(SegmentedButton<bool>), findsNothing);
+    expect(find.byType(SegmentedPicker<bool>), findsNothing);
   });
 
   testWidgets('a quantity can be entered in a convertible unit', (
@@ -165,12 +176,10 @@ void main() {
       item: testItem(unit: ItemUnit.kg, avgPieceWeight: 1.4),
     );
 
-    await tester.tap(find.text('kg'));
-    await tester.pumpAndSettle();
     // Only the units this item can be measured in are offered.
     expect(find.text('L'), findsNothing);
-    await tester.tap(find.text('pcs').last);
-    await tester.pumpAndSettle();
+    await tester.tap(find.text('pcs'));
+    await tester.pump();
 
     await tester.enterText(_field('Amount used'), '1');
     await _save(tester);
@@ -240,6 +249,7 @@ void main() {
     repository.writeGate = Completer<void>();
     await tester.pumpWidget(
       MaterialApp(
+        theme: AppTheme.light,
         home: BlocProvider(
           create: (_) => ItemsCubit(
             repository,
@@ -284,5 +294,22 @@ void main() {
     await _save(tester);
 
     expect(repository.recorded.single.item, newer);
+  });
+
+  testWidgets('previews the new stock before it is saved', (tester) async {
+    final flour = testItem(dailyUsage: 0).copyWith(stockAtBaseline: 3);
+    repository.initialItems = [flour];
+    await _pumpSheet(
+      tester,
+      repository,
+      type: StockEventType.consumed,
+      item: flour,
+    );
+    await tester.pump();
+
+    await tester.enterText(_field('Amount used'), '0,5');
+    await tester.pump();
+
+    expect(find.text('3 kg \u2192 2.5 kg'), findsOneWidget);
   });
 }

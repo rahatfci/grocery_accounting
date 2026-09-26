@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:grocery_accounting/features/items/logic/running_low.dart';
 import 'package:grocery_accounting/features/shopping_list/logic/shopping_entry.dart';
 import 'package:grocery_accounting/features/shopping_list/logic/shopping_match.dart';
 
@@ -110,5 +111,48 @@ void main() {
     test('skips an entry that has not been written', () {
       expect(entriesClearedBy([_entry(id: '')], [testItem()]), isEmpty);
     });
+  });
+
+  group('entryFor', () {
+    test('finds the entry linked to the item', () {
+      final rice = testItem(id: 'rice', name: 'Rice');
+
+      expect(
+        entryFor(rice, [_entry(id: 'e1', text: 'riso', itemId: 'rice')])?.id,
+        'e1',
+      );
+    });
+
+    test('finds an unlinked entry that names the item', () {
+      final rice = testItem(id: 'rice', name: 'Rice');
+
+      expect(entryFor(rice, [_entry(id: 'e2', text: '  RICE ')])?.id, 'e2');
+    });
+
+    test('is null when the item is not on the list', () {
+      final rice = testItem(id: 'rice', name: 'Rice');
+
+      expect(entryFor(rice, [_entry(id: 'e3', text: 'Milk')]), isNull);
+    });
+  });
+
+  test('lowNotOnList drops what is already on the list, keeping order', () {
+    final rice = LowStockItem(
+      item: testItem(id: 'rice', name: 'Rice'),
+      stock: 0,
+    );
+    final oil = LowStockItem(
+      item: testItem(id: 'oil', name: 'Olive oil'),
+      stock: 0.2,
+    );
+    final eggs = LowStockItem(
+      item: testItem(id: 'eggs', name: 'Eggs'),
+      stock: 1,
+    );
+
+    expect(
+      lowNotOnList([rice, oil, eggs], [_entry(id: 'e1', text: 'Olive oil')]),
+      [rice, eggs],
+    );
   });
 }

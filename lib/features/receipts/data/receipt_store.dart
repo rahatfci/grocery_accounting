@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 import '../../../core/data_failure.dart';
 import '../../../core/result.dart';
 import '../logic/receipt.dart';
@@ -29,4 +31,12 @@ abstract interface class ReceiptStore {
   /// how many are left. A photo that fails stays queued for the next flush.
   /// Does nothing on web.
   Future<int> flush();
+
+  /// Whether the photo for [purchaseId] is still waiting on this device to
+  /// upload. Always false on web, which never queues.
+  Future<bool> isQueued(String purchaseId);
+
+  /// The photo for [purchaseId]: from this device's queue while it waits to
+  /// upload, otherwise downloaded from the bucket.
+  Future<Result<Uint8List, DataFailure>> read(String purchaseId);
 }

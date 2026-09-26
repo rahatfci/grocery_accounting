@@ -32,6 +32,13 @@ abstract interface class ItemRepository {
   /// has to decide what a delete means for them.
   Future<Result<void, DataFailure>> delete(Item item);
 
+  /// Every stock event recorded against [itemId], in no particular order,
+  /// refreshed as they are added. The household records a handful a week,
+  /// so the whole trail is read rather than paged.
+  ///
+  /// The stream fails with a [DataFailure], never with a raw Firebase error.
+  Stream<List<StockEventRecord>> watchStockEvents(String itemId);
+
   /// Writes [event] to `consumptionEvents` and the item's new baseline pair,
   /// stamped [now], in one batch. [item] is the version the member saw, so the
   /// new stock is computed from the number on their screen.

@@ -92,6 +92,17 @@ class ReportsCubit extends Cubit<ReportsState> {
 
   void showPreviousMonth() => _showMonth(previousMonth(_month));
 
+  /// Moves to the current month when the clock has left the one on screen.
+  ///
+  /// Home's glance always shows the current month, and Home stays mounted
+  /// across midnight at the end of a month.
+  void showCurrentMonth() {
+    final current = monthStart(_now());
+    if (_month != current) {
+      _showMonth(current);
+    }
+  }
+
   /// Refuses to leave the current month. A purchase cannot be recorded in the
   /// future, so a later month can only ever be empty.
   void showNextMonth() {

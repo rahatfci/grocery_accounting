@@ -2,8 +2,10 @@ import 'package:equatable/equatable.dart';
 
 import '../../../core/data_failure.dart';
 import '../../items/logic/item.dart';
-import '../../members/logic/household_member.dart';
+import '../../members/logic/household.dart';
+import '../../receipts/logic/receipt_reading.dart';
 import '../logic/purchase_draft.dart';
+import '../logic/purchase_summary.dart';
 
 sealed class RecordPurchaseState extends Equatable {
   const RecordPurchaseState();
@@ -22,8 +24,10 @@ final class RecordPurchaseReady extends RecordPurchaseState {
   const RecordPurchaseReady({
     required this.draft,
     required this.items,
-    required this.payers,
+    required this.household,
     this.reading = false,
+    this.readResult,
+    this.readFailed = false,
   });
 
   final PurchaseDraft draft;
@@ -31,14 +35,40 @@ final class RecordPurchaseReady extends RecordPurchaseState {
   /// A receipt photo is being read, and the draft may still change under it.
   final bool reading;
 
+  /// What reading the attached photo found, or null when it has not been
+  /// read: it was added to a draft that already had something in it.
+  final ReceiptReading? readResult;
+
+  /// Reading the attached photo failed, so it is filled in by hand.
+  final bool readFailed;
+
   /// The catalogue, for the item picker. May be empty: an item can be created
   /// on the purchase itself.
   final List<Item> items;
 
-  final List<HouseholdMember> payers;
+  /// Who can have paid, with the colours the payer chips wear.
+  final Household household;
 
   @override
-  List<Object?> get props => [draft, items, payers, reading];
+  List<Object?> get props => [
+    draft,
+    items,
+    household,
+    reading,
+    readResult,
+    readFailed,
+  ];
+}
+
+/// The purchase is written. What it did stays on screen until the member is
+/// done, and the photo's state follows its upload.
+final class RecordPurchaseSaved extends RecordPurchaseState {
+  const RecordPurchaseSaved(this.summary);
+
+  final PurchaseSummary summary;
+
+  @override
+  List<Object?> get props => [summary];
 }
 
 final class RecordPurchaseFailure extends RecordPurchaseState {

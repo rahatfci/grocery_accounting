@@ -7,6 +7,7 @@ import 'package:grocery_accounting/core/result.dart';
 import 'package:grocery_accounting/features/items/logic/item.dart';
 import 'package:grocery_accounting/features/items/logic/item_unit.dart';
 import 'package:grocery_accounting/features/purchases/logic/purchase_draft.dart';
+import 'package:grocery_accounting/features/purchases/logic/purchase_summary.dart';
 import 'package:grocery_accounting/features/purchases/logic/receipt_matching.dart';
 import 'package:grocery_accounting/features/receipts/logic/receipt_alias.dart';
 import 'package:grocery_accounting/features/purchases/presentation/record_purchase_cubit.dart';
@@ -133,9 +134,9 @@ void main() {
         final cubit = await ready();
         final state = cubit.state as RecordPurchaseReady;
 
-        expect(state.payers, hasLength(1));
-        expect(state.payers.single.id, testUser.uid);
-        expect(state.payers.single.displayName, 'rahat');
+        expect(state.household.members, hasLength(1));
+        expect(state.household.members.single.id, testUser.uid);
+        expect(state.household.members.single.displayName, 'Rahat');
       },
     );
 
@@ -150,7 +151,10 @@ void main() {
         );
         final state = cubit.state as RecordPurchaseReady;
 
-        expect(state.payers.map((payer) => payer.id), [testUser.uid, 'zoe']);
+        expect(state.household.members.map((payer) => payer.id), [
+          testUser.uid,
+          'zoe',
+        ]);
       },
     );
 
@@ -175,7 +179,10 @@ void main() {
       members.emitMembers([testMember(id: 'zoe', displayName: 'zoe')]);
       await Future<void>.delayed(Duration.zero);
 
-      expect((cubit.state as RecordPurchaseReady).payers, hasLength(2));
+      expect(
+        (cubit.state as RecordPurchaseReady).household.members,
+        hasLength(2),
+      );
     });
   });
 
@@ -517,7 +524,7 @@ void main() {
 
       await cubit.commit();
 
-      expect(cubit.state, isA<RecordPurchaseReady>());
+      expect(cubit.state, isA<RecordPurchaseSaved>());
       expect(purchases.clearedEntryIds.single, isEmpty);
     });
 
@@ -1022,6 +1029,205 @@ void main() {
         await cubit.commit(),
         const CommitSucceeded(receiptSkipped: PermissionDenied()),
       );
+    });
+  });
+
+  group('after saving', () {
+    Future<RecordPurchaseCubit> filledIn() async {
+      final cubit = await ready();
+      cubit.setShopName('Conad');
+      cubit.setTotalText('10');
+      return cubit;
+    }
+
+    PurchaseSummary summaryOf(RecordPurchaseCubit cubit) =>
+        (cubit.state as RecordPurchaseSaved).summary;
+
+    test('shows what the save did', () async {
+      final cubit = await filledIn();
+      shoppingList.emitEntries([
+        testEntry(id: 'linked', text: 'Basmati', itemId: 'rice'),
+      ]);
+      await Future<void>.delayed(Duration.zero);
+      cubit.addLine(
+        PurchaseDraftLine(
+          item: testItem(id: 'rice', name: 'Rice'),
+          quantity: 1,
+          unit: ItemUnit.kg,
+          lineTotal: 2,
+          scannedText: 'RISO',
+        ),
+      );
+      cubit.addLine(
+        PurchaseDraftLine(
+          item: newTestItem(name: 'Oat milk'),
+          quantity: 1,
+          unit: ItemUnit.kg,
+          lineTotal: 2,
+        ),
+      );
+      cubit.addLine(
+        const PurchaseDraftLine(
+          item: null,
+          quantity: 1,
+          unit: ItemUnit.pcs,
+          lineTotal: 3,
+          scannedText: 'DETERSIVO',
+        ),
+      );
+
+      expect(await cubit.commit(), const CommitSucceeded());
+
+      expect(
+        summaryOf(cubit),
+        const PurchaseSummary(
+          purchaseId: 'new1',
+          total: 10,
+          shopName: 'Conad',
+          payerName: 'Rahat',
+          restocked: 1,
+          created: ['Oat milk'],
+          cleared: 1,
+          learned: 1,
+          spendOnly: 1,
+          photo: SavedPhoto.none,
+        ),
+      );
+    });
+
+    test('names the member who paid', () async {
+      final cubit = await ready(
+        household: [testMember(id: 'zoe', displayName: 'Zoe')],
+      );
+      cubit.setShopName('Conad');
+      cubit.setTotalText('10');
+      cubit.setPaidByUserId('zoe');
+
+      await cubit.commit();
+
+      expect(summaryOf(cubit).payerName, 'Zoe');
+    });
+
+    test('a late report from a collection keeps the summary', () async {
+      final cubit = await filledIn();
+      await cubit.commit();
+
+      items.emitItems([testItem()]);
+      members.emitMembers([testMember()]);
+      await Future<void>.delayed(Duration.zero);
+
+      expect(cubit.state, isA<RecordPurchaseSaved>());
+    });
+
+    test('a refused save stays on the form', () async {
+      final cubit = await filledIn();
+      purchases.commitResult = const Err(PermissionDenied());
+
+      await cubit.commit();
+
+      expect(cubit.state, isA<RecordPurchaseReady>());
+    });
+
+    test('a phone photo shows uploading, then uploaded', () async {
+      final cubit = await filledIn();
+      cubit.attachReceipt(testPhoto());
+
+      await cubit.commit();
+      expect(summaryOf(cubit).photo, SavedPhoto.uploading);
+
+      await pumpEventQueue();
+      expect(receipts.flushes, 1);
+      expect(summaryOf(cubit).photo, SavedPhoto.uploaded);
+    });
+
+    test('a phone photo still queued waits for signal', () async {
+      final cubit = await filledIn();
+      cubit.attachReceipt(testPhoto());
+      receipts.queued.add('new1');
+
+      await cubit.commit();
+      await pumpEventQueue();
+
+      expect(summaryOf(cubit).photo, SavedPhoto.waiting);
+    });
+
+    test('a photo on the web is stored before the summary', () async {
+      final cubit = await filledIn();
+      receipts.queuesOffline = false;
+      cubit.attachReceipt(testPhoto());
+
+      await cubit.commit();
+
+      expect(summaryOf(cubit).photo, SavedPhoto.uploaded);
+      await pumpEventQueue();
+      expect(receipts.flushes, 0);
+    });
+
+    test('a photo that could not be kept says why', () async {
+      final cubit = await filledIn();
+      cubit.attachReceipt(testPhoto());
+      receipts.keepResult = const Err(ConnectionUnavailable());
+
+      await cubit.commit();
+
+      expect(summaryOf(cubit).photo, SavedPhoto.notSaved);
+      expect(
+        summaryOf(cubit).photoProblem,
+        const ConnectionUnavailable().message,
+      );
+    });
+  });
+
+  group('the receipt strip', () {
+    const reading = ReceiptReading(
+      total: 5.48,
+      date: null,
+      lines: [
+        ScannedLine(
+          rawText: 'YOGURT BIANCO',
+          quantity: 2,
+          unit: ItemUnit.pcs,
+          lineTotal: 2.58,
+        ),
+      ],
+    );
+
+    RecordPurchaseReady readyOf(RecordPurchaseCubit cubit) =>
+        cubit.state as RecordPurchaseReady;
+
+    test('carries what reading the photo found', () async {
+      final cubit = await ready();
+      receiptReader.result = const Ok(reading);
+
+      await cubit.pickReceipt(ReceiptSource.camera);
+
+      expect(readyOf(cubit).readResult, reading);
+      expect(readyOf(cubit).readFailed, isFalse);
+    });
+
+    test('says when the read failed', () async {
+      final cubit = await ready();
+      receiptReader.result = Err(
+        ReceiptReadFailure(StateError('ocr'), StackTrace.empty),
+      );
+
+      await cubit.pickReceipt(ReceiptSource.camera);
+
+      expect(readyOf(cubit).readResult, isNull);
+      expect(readyOf(cubit).readFailed, isTrue);
+    });
+
+    test('forgets both when the photo is removed or replaced', () async {
+      final cubit = await ready();
+      receiptReader.result = const Ok(reading);
+      await cubit.pickReceipt(ReceiptSource.camera);
+
+      cubit.attachReceipt(testPhoto(2));
+      expect(readyOf(cubit).readResult, isNull);
+
+      cubit.removeReceipt();
+      expect(readyOf(cubit).readResult, isNull);
+      expect(readyOf(cubit).readFailed, isFalse);
     });
   });
 }

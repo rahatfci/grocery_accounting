@@ -18,6 +18,7 @@ abstract interface class MemberRepository {
   ///
   /// Called once per session, on sign in and on launch with an existing
   /// session. `createdAt` is written only when the document is absent, so a
-  /// later mirror write cannot move it.
+  /// later mirror write cannot move it, and a display name edited in the
+  /// Firebase console is kept.
   Future<Result<void, DataFailure>> upsertCurrentMember(AppUser user);
 }

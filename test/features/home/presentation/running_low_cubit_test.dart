@@ -64,7 +64,10 @@ void main() {
     repository.emitItems([rice, stocked('Salt', stock: 5, threshold: 1)]);
     await pumpEventQueue();
 
-    expect(cubit.state, RunningLowLoaded([LowStockItem(item: rice, stock: 1)]));
+    expect(
+      cubit.state,
+      RunningLowLoaded([LowStockItem(item: rice, stock: 1)], now: now),
+    );
 
     await cubit.close();
   });
@@ -160,7 +163,7 @@ void main() {
 
     expect(
       cubit.state,
-      RunningLowLoaded([LowStockItem(item: pasta, stock: 1.5)]),
+      RunningLowLoaded([LowStockItem(item: pasta, stock: 1.5)], now: now),
     );
 
     await cubit.close();

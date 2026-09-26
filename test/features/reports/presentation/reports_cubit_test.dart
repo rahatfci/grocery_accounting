@@ -406,4 +406,43 @@ void main() {
       await cubit.close();
     });
   });
+
+  group('showCurrentMonth', () {
+    test('does nothing while the current month is on screen', () async {
+      final cubit = build();
+
+      cubit.showCurrentMonth();
+
+      expect(purchases.watchWindowCalls, 1);
+      await cubit.close();
+    });
+
+    test('moves back to the current month from an earlier one', () async {
+      final cubit = build();
+      cubit.showPreviousMonth();
+
+      cubit.showCurrentMonth();
+
+      expect(cubit.state.month, september);
+      expect(purchases.windows.last.from, august);
+      await cubit.close();
+    });
+
+    test('follows the clock into a new month', () async {
+      var clock = now;
+      final cubit = ReportsCubit(
+        purchases: purchases,
+        items: items,
+        members: members,
+        sharer: sharer,
+        now: () => clock,
+      );
+
+      clock = DateTime(2026, 10, 1, 8);
+      cubit.showCurrentMonth();
+
+      expect(cubit.state.month, october);
+      await cubit.close();
+    });
+  });
 }

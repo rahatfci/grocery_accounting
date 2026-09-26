@@ -36,6 +36,23 @@ class FirestoreItemRepository implements ItemRepository {
             Error.throwWithStackTrace(dataFailureFromError(error), stackTrace),
       );
 
+  /// Equality on one field, so the automatic single-field index serves it and
+  /// no composite index has to be deployed. Ordering happens on the device.
+  @override
+  Stream<List<StockEventRecord>> watchStockEvents(String itemId) => _events
+      .where('itemId', isEqualTo: itemId)
+      .snapshots()
+      .map(
+        (snapshot) => [
+          for (final doc in snapshot.docs)
+            ?stockEventFromFirestore(doc.id, doc.data()),
+        ],
+      )
+      .handleError(
+        (Object error, StackTrace stackTrace) =>
+            Error.throwWithStackTrace(dataFailureFromError(error), stackTrace),
+      );
+
   @override
   Future<Result<void, DataFailure>> create(Item item) => _write(
     () => _items.add(

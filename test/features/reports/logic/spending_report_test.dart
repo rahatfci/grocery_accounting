@@ -2,6 +2,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:grocery_accounting/features/items/logic/item.dart';
 import 'package:grocery_accounting/features/members/logic/household_member.dart';
 import 'package:grocery_accounting/features/purchases/logic/purchase.dart';
+import 'package:grocery_accounting/features/members/logic/household.dart';
 import 'package:grocery_accounting/features/reports/logic/spending_report.dart';
 
 import '../../items/fake_item_repository.dart';
@@ -151,7 +152,7 @@ void main() {
       );
 
       final unknown = result.byPerson.last;
-      expect(unknown.displayName, unknownMemberLabel);
+      expect(unknown.displayName, unknownMemberName);
       expect(unknown.paid, 40);
       expect(unknown.hasShare, isFalse);
       expect(unknown.share, 0);
@@ -456,6 +457,60 @@ void main() {
 
       expect(result.monthOverMonthChange, 80);
       expect(result.monthOverMonthFraction, isNull);
+    });
+  });
+
+  group('what the tab lists', () {
+    test('the month\'s purchases, newest first, same day in arrival order', () {
+      final result = report(
+        purchases: [
+          testPurchase(id: 'a', date: DateTime(2026, 9, 10)),
+          testPurchase(id: 'b', date: DateTime(2026, 9, 12, 9)),
+          testPurchase(id: 'c', date: DateTime(2026, 9, 12, 9)),
+          testPurchase(id: 'old', date: inAugust),
+        ],
+      );
+
+      expect(result.purchases.map((purchase) => purchase.id), ['b', 'c', 'a']);
+    });
+
+    test('a category row names its stored category, the others none', () {
+      final result = report(
+        purchases: [
+          testPurchase(
+            date: inSeptember,
+            total: 20,
+            lines: [
+              testLine(itemId: 'rice', lineTotal: 5),
+              testLine(itemId: 'soap', lineTotal: 3),
+              testLine(itemId: null, lineTotal: 2),
+            ],
+          ),
+        ],
+        items: [
+          testItem(id: 'rice', category: 'pantry'),
+          testItem(id: 'soap', category: ' Baby  food '),
+        ],
+      );
+
+      expect(
+        [for (final row in result.byCategory) (row.label, row.category)],
+        [
+          ('Pantry & Dry Goods', 'pantry'),
+          ('Baby food', 'Baby food'),
+          (uncategorisedLabel, null),
+          (notItemisedLabel, null),
+        ],
+      );
+      expect(result.byShop.single.category, isNull);
+    });
+
+    test('the equal share splits the month across the household', () {
+      final members = [testMember(id: 'a'), testMember(id: 'b')];
+      final purchases = [testPurchase(date: inSeptember, total: 50)];
+
+      expect(report(purchases: purchases, members: members).equalShare, 25);
+      expect(report(purchases: purchases).equalShare, 0);
     });
   });
 }

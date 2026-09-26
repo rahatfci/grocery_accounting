@@ -21,6 +21,10 @@ typedef ReceiptUpload =
       String contentType,
     );
 
+/// Fetches the object at [path] in the receipts bucket.
+typedef ReceiptDownload =
+    Future<Result<Uint8List, DataFailure>> Function(String path);
+
 /// Long enough for a 500 KB photo on poor signal. Past it the upload counts
 /// as failed and the phone queue retries on the next flush; on web it bounds
 /// how long saving waits.
@@ -75,6 +79,47 @@ Future<Result<void, DataFailure>> uploadReceiptToSupabase(
   }
 }
 
+/// Downloads one receipt through the Supabase Storage REST API, with the
+/// same publishable key the upload uses. What it may read is decided by the
+/// bucket's policies, as for the upload.
+@visibleForTesting
+Future<Result<Uint8List, DataFailure>> downloadReceiptFromSupabase(
+  http.Client client,
+  String path,
+) async {
+  final uri = Uri.parse(SupabaseConfig.url).replace(
+    pathSegments: [
+      'storage',
+      'v1',
+      'object',
+      SupabaseConfig.receiptsBucket,
+      ...path.split('/'),
+    ],
+  );
+  try {
+    final response = await client
+        .get(
+          uri,
+          headers: {
+            'apikey': SupabaseConfig.publishableKey,
+            'Authorization': 'Bearer ${SupabaseConfig.publishableKey}',
+          },
+        )
+        .timeout(_uploadTimeout);
+    return switch (_storageStatus(response)) {
+      >= 200 && < 300 => Ok(response.bodyBytes),
+      401 || 403 => const Err(PermissionDenied()),
+      _ => const Err(UnexpectedDataFailure()),
+    };
+  } on TimeoutException {
+    return const Err(ConnectionUnavailable());
+  } on http.ClientException {
+    return const Err(ConnectionUnavailable());
+  } on SocketException {
+    return const Err(ConnectionUnavailable());
+  }
+}
+
 /// The status Storage meant. It answers some refusals with HTTP 400 and the
 /// real status in the body, for example a missing bucket policy arrives as 400
 /// with `"statusCode":"403"`, and an existing object as 400 with `"409"`.
@@ -108,6 +153,7 @@ class SupabaseReceiptStore implements ReceiptStore {
     : this.withSeams(
         upload: (path, bytes, contentType) =>
             uploadReceiptToSupabase(client, path, bytes, contentType),
+        download: (path) => downloadReceiptFromSupabase(client, path),
         queueDirectory: () async => Directory(
           '${(await getApplicationSupportDirectory()).path}/pending_receipts',
         ),
@@ -119,11 +165,13 @@ class SupabaseReceiptStore implements ReceiptStore {
   @visibleForTesting
   SupabaseReceiptStore.withSeams({
     required this._upload,
+    required this._download,
     required this._queueDirectory,
     required this._isWeb,
   });
 
   final ReceiptUpload _upload;
+  final ReceiptDownload _download;
   final Future<Directory> Function() _queueDirectory;
   final bool _isWeb;
 
@@ -233,6 +281,35 @@ class SupabaseReceiptStore implements ReceiptStore {
     } finally {
       _flushing = false;
     }
+  }
+
+  @override
+  Future<bool> isQueued(String purchaseId) async {
+    if (_isWeb) {
+      return false;
+    }
+    final directory = await _queueDirectory();
+    return File('${directory.path}/${pendingReceiptName(purchaseId)}').exists();
+  }
+
+  @override
+  Future<Result<Uint8List, DataFailure>> read(String purchaseId) async {
+    if (!_isWeb) {
+      // Still on the phone, confirmed or not, so the member sees their own
+      // photo before it has reached the bucket.
+      final directory = await _queueDirectory();
+      for (final file in [
+        File('${directory.path}/${pendingReceiptName(purchaseId)}'),
+        _unconfirmed(directory, purchaseId),
+      ]) {
+        try {
+          return Ok(await file.readAsBytes());
+        } on FileSystemException {
+          // Not queued under this name.
+        }
+      }
+    }
+    return _download(receiptStoragePath(purchaseId));
   }
 
   Future<Result<void, DataFailure>> _uploadNow(

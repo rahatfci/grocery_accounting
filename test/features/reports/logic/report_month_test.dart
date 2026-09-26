@@ -60,4 +60,8 @@ void main() {
     expect(monthLabel(DateTime(2026, 9)), 'September 2026');
     expect(monthLabel(DateTime(2025, 12)), 'December 2025');
   });
+
+  test('monthName is the name alone', () {
+    expect(monthName(DateTime(2026, 8)), 'August');
+  });
 }

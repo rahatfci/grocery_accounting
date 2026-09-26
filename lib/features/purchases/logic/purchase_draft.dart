@@ -16,6 +16,7 @@ final class PurchaseDraftLine extends Equatable {
     required this.unit,
     required this.lineTotal,
     this.scannedText,
+    this.learned = false,
   });
 
   /// The catalogue item, or one with an empty id that the commit creates.
@@ -33,6 +34,10 @@ final class PurchaseDraftLine extends Equatable {
   final ItemUnit unit;
 
   final double lineTotal;
+
+  /// Matched by what an earlier purchase taught, not by the member here.
+  /// Editing the line makes it the member's own match again.
+  final bool learned;
 
   bool get isMatched => item != null;
 
@@ -55,7 +60,14 @@ final class PurchaseDraftLine extends Equatable {
   };
 
   @override
-  List<Object?> get props => [item, quantity, unit, lineTotal, scannedText];
+  List<Object?> get props => [
+    item,
+    quantity,
+    unit,
+    lineTotal,
+    scannedText,
+    learned,
+  ];
 }
 
 const Object _unchanged = Object();
