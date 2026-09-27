@@ -70,6 +70,30 @@ class ShoppingListCubit extends Cubit<ShoppingListState> {
     );
   }
 
+  /// Puts [item] on the list, linked to it, unless it is already there.
+  ///
+  /// Like [add], the caller must not block on the returned future.
+  Future<Result<void, DataFailure>> addItem(Item item) {
+    final state = this.state;
+    final entries = state is ShoppingListLoaded
+        ? state.entries
+        : const <ShoppingEntry>[];
+    if (entryFor(item, entries) != null) {
+      return Future.value(const Ok(null));
+    }
+    return _write(
+      () => _entries.add(
+        ShoppingEntry(
+          id: '',
+          text: item.name,
+          itemId: item.id.isEmpty ? null : item.id,
+          addedByUserId: _currentUser.uid,
+          addedAt: _clock(),
+        ),
+      ),
+    );
+  }
+
   /// Takes [entry] off the list for everyone.
   Future<Result<void, DataFailure>> remove(ShoppingEntry entry) =>
       _write(() => _entries.remove(entry.id));

@@ -21,13 +21,17 @@ final class RunningLowNone extends RunningLowState {
 }
 
 final class RunningLowLoaded extends RunningLowState {
-  const RunningLowLoaded(this.items);
+  const RunningLowLoaded(this.items, {required this.now});
 
   /// Never empty; an empty result is [RunningLowNone].
   final List<LowStockItem> items;
 
+  /// The moment the items were judged at, so a date shown beside them, such
+  /// as when one ran out, is worked out against the same instant.
+  final DateTime now;
+
   @override
-  List<Object?> get props => [items];
+  List<Object?> get props => [items, now];
 }
 
 final class RunningLowFailure extends RunningLowState {

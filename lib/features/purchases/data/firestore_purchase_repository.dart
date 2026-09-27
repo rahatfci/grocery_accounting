@@ -138,6 +138,37 @@ class FirestorePurchaseRepository implements PurchaseRepository {
             Error.throwWithStackTrace(dataFailureFromError(error), stackTrace),
       );
 
+  /// `itemIds` is denormalized for exactly this: Firestore cannot query a
+  /// field inside the `lines` array. No `orderBy`, so the automatic index
+  /// serves it; the history sorts on the device.
+  @override
+  Stream<List<Purchase>> watchPurchasesWithItem(String itemId) => _purchases
+      .where('itemIds', arrayContains: itemId)
+      .snapshots()
+      .map(
+        (snapshot) => [
+          for (final doc in snapshot.docs)
+            purchaseFromFirestore(doc.id, doc.data()),
+        ],
+      )
+      .handleError(
+        (Object error, StackTrace stackTrace) =>
+            Error.throwWithStackTrace(dataFailureFromError(error), stackTrace),
+      );
+
+  @override
+  Stream<Purchase?> watchPurchase(String purchaseId) => _purchases
+      .doc(purchaseId)
+      .snapshots()
+      .map((doc) {
+        final data = doc.data();
+        return data == null ? null : purchaseFromFirestore(doc.id, data);
+      })
+      .handleError(
+        (Object error, StackTrace stackTrace) =>
+            Error.throwWithStackTrace(dataFailureFromError(error), stackTrace),
+      );
+
   @override
   String newPurchaseId() => _purchases.doc().id;
 

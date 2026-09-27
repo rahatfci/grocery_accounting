@@ -5,12 +5,13 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../../core/data_failure.dart';
 import '../../../core/result.dart';
-import '../../home/presentation/home_page.dart';
 import '../../members/data/member_repository.dart';
+import '../../shell/presentation/app_shell.dart';
 import '../logic/app_user.dart';
 import 'auth_cubit.dart';
 import 'auth_state.dart';
 import 'sign_in_page.dart';
+import 'splash_view.dart';
 
 /// Chooses the root screen from the session. The switch is exhaustive over the
 /// sealed state, so a new state cannot be added without handling it here.
@@ -46,11 +47,11 @@ class _AuthGateState extends State<AuthGate> {
         }
       },
       builder: (context, state) => switch (state) {
-        AuthInitial() => const _SessionUnknown(),
+        AuthInitial() => const SplashView(),
         AuthSignedOut() ||
         AuthSubmitting() ||
         AuthSignInFailure() => const SignInPage(),
-        AuthSignedIn(:final user) => HomePage(user: user),
+        AuthSignedIn(:final user) => AppShell(user: user),
       },
     );
   }
@@ -71,13 +72,4 @@ void _mirrorMember(MemberRepository repository, AppUser user) {
           (Object _) => const Err<void, DataFailure>(UnexpectedDataFailure()),
         ),
   );
-}
-
-class _SessionUnknown extends StatelessWidget {
-  const _SessionUnknown();
-
-  @override
-  Widget build(BuildContext context) {
-    return const Scaffold(body: Center(child: CircularProgressIndicator()));
-  }
 }

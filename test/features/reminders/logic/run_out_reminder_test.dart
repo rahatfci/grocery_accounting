@@ -142,4 +142,23 @@ void main() {
     expect(reminder.title, 'Rice is running out');
     expect(reminder.body, 'Expected to run out on 05/09/2026.');
   });
+
+  group('reminderFor', () {
+    test('is the same reminder the plan holds for the item', () {
+      final item = staple('Rice', days: 4);
+
+      expect(
+        reminderFor(item, now: baseline),
+        runOutReminders([item], now: baseline).single,
+      );
+    });
+
+    test('is null for something that is not a staple', () {
+      final item = testItem(
+        dailyUsage: 0,
+      ).copyWith(stockAtBaseline: 3, baselineDate: baseline);
+
+      expect(reminderFor(item, now: baseline), isNull);
+    });
+  });
 }

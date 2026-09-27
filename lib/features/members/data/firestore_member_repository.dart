@@ -46,8 +46,14 @@ class FirestoreMemberRepository implements MemberRepository {
     try {
       final snapshot = await document.get();
       if (snapshot.exists) {
-        // Merge, so the `createdAt` already on the document survives.
-        await document.set(memberToFirestore(member), SetOptions(merge: true));
+        // Merge, so `createdAt` and a name edited in the console survive.
+        await document.set(
+          memberRefreshToFirestore(
+            email: member.email,
+            existingDisplayName: snapshot.data()?['displayName'],
+          ),
+          SetOptions(merge: true),
+        );
       } else {
         await document.set(
           newMemberToFirestore(member, createdAt: FieldValue.serverTimestamp()),

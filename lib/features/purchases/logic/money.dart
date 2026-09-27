@@ -14,4 +14,19 @@ final DateFormat _day = DateFormat('dd/MM/yyyy');
 
 String formatEuro(double amount) => _euro.format(amount);
 
+/// An amount as a money field shows it: two decimals and a decimal comma,
+/// the way a receipt prints it, and no symbol, since the field has its own.
+String formatAmountInput(double amount) =>
+    amount.toStringAsFixed(2).replaceAll('.', ',');
+
 String formatPurchaseDate(DateTime date) => _day.format(date);
+
+/// A difference in EUR with its sign always shown: `+42,10 €`, `−18,30 €`.
+/// The minus is the typographic one, so it reads at the width of the plus.
+String formatSignedEuro(double amount) {
+  final magnitude = formatEuro(amount.abs());
+  if (amount.abs() < 0.005) {
+    return magnitude;
+  }
+  return amount > 0 ? '+$magnitude' : '−$magnitude';
+}

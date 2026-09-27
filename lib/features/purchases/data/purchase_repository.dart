@@ -62,6 +62,17 @@ abstract interface class PurchaseRepository {
     required DateTime toExclusive,
   });
 
+  /// Every purchase with a line for [itemId], in no particular order,
+  /// refreshed as the collection changes. For the item's history.
+  ///
+  /// The stream fails with a [DataFailure], never with a raw Firebase error.
+  Stream<List<Purchase>> watchPurchasesWithItem(String itemId);
+
+  /// One purchase, or null once it no longer exists.
+  ///
+  /// The stream fails with a [DataFailure], never with a raw Firebase error.
+  Stream<Purchase?> watchPurchase(String purchaseId);
+
   /// Whether any purchase still references [itemId].
   ///
   /// Offline this reads the local cache and can miss a purchase this device

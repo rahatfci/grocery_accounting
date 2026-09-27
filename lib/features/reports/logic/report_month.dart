@@ -4,6 +4,7 @@ import 'package:intl/intl.dart';
 /// same reason the purchase date format is: the interface is English, and no
 /// date symbol data has to be initialised before the first frame.
 final DateFormat _month = DateFormat('MMMM yyyy');
+final DateFormat _monthName = DateFormat('MMMM');
 
 /// The first instant of the month [day] falls in, in local time.
 ///
@@ -27,3 +28,6 @@ bool canViewNextMonth(DateTime month, {required DateTime now}) =>
     monthStart(month).isBefore(monthStart(now));
 
 String monthLabel(DateTime month) => _month.format(month);
+
+/// The month's name alone: `September`.
+String monthName(DateTime month) => _monthName.format(month);

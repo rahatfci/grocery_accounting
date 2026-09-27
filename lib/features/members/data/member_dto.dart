@@ -1,6 +1,6 @@
 import '../logic/household_member.dart';
 
-/// The `users` fields a sign in refreshes.
+/// The `users` fields of a member, without `createdAt`.
 ///
 /// `createdAt` is deliberately absent: it belongs to [newMemberToFirestore]
 /// and must survive every later mirror write.
@@ -8,6 +8,21 @@ Map<String, Object?> memberToFirestore(HouseholdMember member) => {
   'displayName': member.displayName,
   'email': member.email,
 };
+
+/// What a sign in merges into an existing `users` document: the email always,
+/// and the display name only when `mirroredDisplayName` says the stored one
+/// was not chosen by the household. [existingDisplayName] is read as it is on
+/// the document, whatever its type.
+Map<String, Object?> memberRefreshToFirestore({
+  required String email,
+  required Object? existingDisplayName,
+}) {
+  final name = mirroredDisplayName(
+    stored: existingDisplayName is String ? existingDisplayName : null,
+    email: email,
+  );
+  return {'email': email, 'displayName': ?name};
+}
 
 /// The full body of a `users` document that does not exist yet.
 ///

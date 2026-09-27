@@ -67,6 +67,20 @@ class FakeReceiptStore implements ReceiptStore {
   @override
   Future<void> discard(String purchaseId) async => discarded.add(purchaseId);
 
+  /// What `flush` reports as still queued.
+  int remaining = 0;
+
+  /// Purchases whose photo is still queued on the phone.
+  final queued = <String>{};
+
+  /// Photos `read` returns, by purchase id. A missing one is a failure.
+  final photos = <String, Uint8List>{};
+  DataFailure readFailure = const UnexpectedDataFailure();
+  final reads = <String>[];
+
+  /// When set, `read` waits on this, so a test can see the photo load.
+  Completer<void>? readGate;
+
   @override
   Future<int> flush() async {
     flushes++;
@@ -74,7 +88,18 @@ class FakeReceiptStore implements ReceiptStore {
     if (thrown != null) {
       throw thrown;
     }
-    return 0;
+    return remaining;
+  }
+
+  @override
+  Future<bool> isQueued(String purchaseId) async => queued.contains(purchaseId);
+
+  @override
+  Future<Result<Uint8List, DataFailure>> read(String purchaseId) async {
+    reads.add(purchaseId);
+    await readGate?.future;
+    final bytes = photos[purchaseId];
+    return bytes == null ? Err(readFailure) : Ok(bytes);
   }
 }
 

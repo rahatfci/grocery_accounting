@@ -29,4 +29,26 @@ void main() {
       expect(formatPurchaseDate(DateTime(2026, 1, 5)), '05/01/2026');
     });
   });
+
+  group('formatSignedEuro', () {
+    test('marks a rise with a plus', () {
+      expect(_plain(formatSignedEuro(42.1)), '+42,10 €');
+    });
+
+    test('marks a fall with a minus sign', () {
+      expect(_plain(formatSignedEuro(-18.3)), '−18,30 €');
+    });
+
+    test('leaves nothing unsigned', () {
+      expect(_plain(formatSignedEuro(0.001)), '0,00 €');
+    });
+  });
+
+  group('formatAmountInput', () {
+    test('writes two decimals with a comma and no symbol', () {
+      expect(formatAmountInput(1.78), '1,78');
+      expect(formatAmountInput(40.8), '40,80');
+      expect(formatAmountInput(3), '3,00');
+    });
+  });
 }

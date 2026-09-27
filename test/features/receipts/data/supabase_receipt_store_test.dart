@@ -26,8 +26,19 @@ void main() {
     return uploadResult;
   }
 
+  final downloads = <String>[];
+  Result<Uint8List, DataFailure> downloadResult = Ok(
+    Uint8List.fromList([9, 9]),
+  );
+
+  Future<Result<Uint8List, DataFailure>> download(String path) async {
+    downloads.add(path);
+    return downloadResult;
+  }
+
   SupabaseReceiptStore phone() => SupabaseReceiptStore.withSeams(
     upload: upload,
+    download: download,
     queueDirectory: () async => queue,
     isWeb: false,
   );
@@ -42,6 +53,8 @@ void main() {
     uploads = [];
     uploadResult = const Ok(null);
     uploadGate = null;
+    downloads.clear();
+    downloadResult = Ok(Uint8List.fromList([9, 9]));
   });
 
   tearDown(() => root.deleteSync(recursive: true));
@@ -181,6 +194,7 @@ void main() {
   group('on web', () {
     SupabaseReceiptStore web() => SupabaseReceiptStore.withSeams(
       upload: upload,
+      download: download,
       queueDirectory: () async => throw StateError('web has no disk'),
       isWeb: true,
     );
@@ -231,6 +245,68 @@ void main() {
       expect(await store.confirm('p1'), isA<Err<void, DataFailure>>());
       expect(await store.flush(), 0);
       expect(uploads, isEmpty);
+    });
+  });
+
+  group('reading a photo back', () {
+    test('a phone reads a photo still queued without downloading it', () async {
+      final store = phone();
+      await store.keep('p1', testPhoto(7));
+      await store.confirm('p1');
+
+      final read = await store.read('p1');
+
+      expect((read as Ok<Uint8List, DataFailure>).value, testPhoto(7).bytes);
+      expect(downloads, isEmpty);
+      expect(await store.isQueued('p1'), isTrue);
+    });
+
+    test('a phone reads a kept photo before it is confirmed', () async {
+      final store = phone();
+      await store.keep('p1', testPhoto(3));
+
+      final read = await store.read('p1');
+
+      expect((read as Ok<Uint8List, DataFailure>).value, testPhoto(3).bytes);
+      expect(await store.isQueued('p1'), isFalse);
+    });
+
+    test('an uploaded photo is downloaded from its bucket path', () async {
+      final store = await (() async {
+        final store = phone();
+        await store.keep('p1', testPhoto());
+        await store.confirm('p1');
+        await store.flush();
+        return store;
+      })();
+
+      final read = await store.read('p1');
+
+      expect(downloads, ['receipts/p1']);
+      expect((read as Ok<Uint8List, DataFailure>).value, [9, 9]);
+      expect(await store.isQueued('p1'), isFalse);
+    });
+
+    test('a failed download comes back as its failure', () async {
+      downloadResult = const Err(PermissionDenied());
+
+      final read = await phone().read('missing');
+
+      expect(read, const Err<Uint8List, DataFailure>(PermissionDenied()));
+    });
+
+    test('the web always downloads and never queues', () async {
+      final store = SupabaseReceiptStore.withSeams(
+        upload: upload,
+        download: download,
+        queueDirectory: () async => throw StateError('web has no disk'),
+        isWeb: true,
+      );
+
+      await store.read('p1');
+
+      expect(downloads, ['receipts/p1']);
+      expect(await store.isQueued('p1'), isFalse);
     });
   });
 }
