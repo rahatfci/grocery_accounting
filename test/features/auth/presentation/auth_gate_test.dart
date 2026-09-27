@@ -7,7 +7,6 @@ import 'package:grocery_accounting/features/auth/presentation/auth_cubit.dart';
 import 'package:grocery_accounting/features/auth/presentation/auth_gate.dart';
 import 'package:grocery_accounting/features/auth/presentation/auth_state.dart';
 import 'package:grocery_accounting/features/auth/presentation/sign_in_page.dart';
-import 'package:grocery_accounting/features/auth/presentation/splash_view.dart';
 import 'package:grocery_accounting/features/items/data/item_repository.dart';
 import 'package:grocery_accounting/features/members/data/member_repository.dart';
 import 'package:grocery_accounting/features/purchases/data/purchase_repository.dart';
@@ -83,7 +82,6 @@ void main() {
   ) async {
     await _pumpGate(tester, repository, members);
 
-    expect(find.byType(SplashView), findsOneWidget);
     expect(find.byType(SignInPage), findsNothing);
     expect(find.byType(AppShell), findsNothing);
   });

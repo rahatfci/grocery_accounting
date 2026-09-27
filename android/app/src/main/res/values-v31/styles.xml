@@ -2,9 +2,12 @@
 
 <resources>
 
+    <!-- The Android 12+ splash API only shows an icon and a bottom branding
+         image, so the titles from the Figma splash cannot appear here. -->
     <style name="LaunchTheme" parent="@android:style/Theme.Light.NoTitleBar">
         <item name="android:windowSplashScreenBackground">@color/splash_background</item>
-        <item name="android:windowSplashScreenAnimatedIcon">@drawable/splash_logo</item>
+        <item name="android:windowSplashScreenAnimatedIcon">@drawable/splash_icon</item>
+        <item name="android:windowSplashScreenBrandingImage">@drawable/splash_branding</item>
     </style>
 
 </resources>

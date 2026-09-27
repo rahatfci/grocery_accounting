@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
@@ -20,7 +22,11 @@ import 'features/shopping_list/data/shopping_list_repository.dart';
 import 'firebase_options.dart';
 
 Future<void> main() async {
-  WidgetsFlutterBinding.ensureInitialized();
+  final binding = WidgetsFlutterBinding.ensureInitialized();
+  // The native launch screen stays up until Flutter paints its first frame.
+  // Holding that frame until the saved session is restored means nobody sees
+  // the sign in form flash past, with no Flutter splash in between.
+  binding.deferFirstFrame();
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
   // Web defaults the on-disk cache to off, so offline capture needs this set
   // explicitly rather than relying on the mobile default. Without the multi-tab
@@ -32,9 +38,11 @@ Future<void> main() async {
   );
   Bloc.observer = const ErrorReportingBlocObserver();
   configureDependencies();
+  final authCubit = getIt<AuthCubit>();
+  unawaited(authCubit.sessionKnown().whenComplete(binding.allowFirstFrame));
   runApp(
     GroceryAccountingApp(
-      authCubit: getIt<AuthCubit>(),
+      authCubit: authCubit,
       itemRepository: getIt<ItemRepository>(),
       memberRepository: getIt<MemberRepository>(),
       purchaseRepository: getIt<PurchaseRepository>(),

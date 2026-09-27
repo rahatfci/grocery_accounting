@@ -5,13 +5,13 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../../core/data_failure.dart';
 import '../../../core/result.dart';
+import '../../../core/theme/app_colors.dart';
 import '../../members/data/member_repository.dart';
 import '../../shell/presentation/app_shell.dart';
 import '../logic/app_user.dart';
 import 'auth_cubit.dart';
 import 'auth_state.dart';
 import 'sign_in_page.dart';
-import 'splash_view.dart';
 
 /// Chooses the root screen from the session. The switch is exhaustive over the
 /// sealed state, so a new state cannot be added without handling it here.
@@ -47,7 +47,10 @@ class _AuthGateState extends State<AuthGate> {
         }
       },
       builder: (context, state) => switch (state) {
-        AuthInitial() => const SplashView(),
+        // main holds the first frame until the session is known, so this is
+        // only painted if the restore outlasts that wait. The brand colour
+        // then reads as a continuation of the native launch screen.
+        AuthInitial() => const ColoredBox(color: AppColors.brand),
         AuthSignedOut() ||
         AuthSubmitting() ||
         AuthSignInFailure() => const SignInPage(),

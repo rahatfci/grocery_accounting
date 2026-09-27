@@ -40,6 +40,41 @@ void main() {
     cubit.close();
   });
 
+  test('the session is known once the stream first reports', () async {
+    final cubit = AuthCubit(repository);
+    var known = false;
+    unawaited(cubit.sessionKnown().then((_) => known = true));
+
+    await Future<void>.delayed(Duration.zero);
+    expect(known, isFalse);
+
+    repository.emitAuthState(null);
+    await Future<void>.delayed(Duration.zero);
+    expect(known, isTrue);
+
+    await cubit.close();
+  });
+
+  test('the session is known straight away after the first report', () async {
+    final cubit = AuthCubit(repository);
+    repository.emitAuthState(testUser);
+    await Future<void>.delayed(Duration.zero);
+
+    await cubit.sessionKnown(timeout: Duration.zero);
+
+    expect(cubit.state, const AuthSignedIn(testUser));
+    await cubit.close();
+  });
+
+  test('a stream that never reports stops waiting after the timeout', () async {
+    final cubit = AuthCubit(repository);
+
+    await cubit.sessionKnown(timeout: const Duration(milliseconds: 10));
+
+    expect(cubit.state, const AuthInitial());
+    await cubit.close();
+  });
+
   test('an existing session is picked up from the stream', () async {
     final cubit = AuthCubit(repository);
     final expectation = expectLater(

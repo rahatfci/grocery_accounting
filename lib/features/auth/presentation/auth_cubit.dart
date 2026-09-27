@@ -55,6 +55,17 @@ class AuthCubit extends Cubit<AuthState> {
     }
   }
 
+  /// Completes once the auth stream has said whether a session exists, or
+  /// after [timeout], so a stalled restore cannot hold the launch screen.
+  Future<void> sessionKnown({
+    Duration timeout = const Duration(seconds: 5),
+  }) async {
+    if (state is! AuthInitial) return;
+    await stream
+        .firstWhere((state) => state is! AuthInitial)
+        .timeout(timeout, onTimeout: () => state);
+  }
+
   /// Drops a failure message once the user starts correcting the form.
   void failureAcknowledged() {
     if (state is AuthSignInFailure) {

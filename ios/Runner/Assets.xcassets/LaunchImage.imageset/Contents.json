@@ -1,17 +1,17 @@
 {
   "images" : [
     {
-      "filename" : "App icon@2x.png",
+      "filename" : "launch_center.png",
       "idiom" : "universal",
       "scale" : "1x"
     },
     {
-      "filename" : "App icon@2x 1.png",
+      "filename" : "launch_center@2x.png",
       "idiom" : "universal",
       "scale" : "2x"
     },
     {
-      "filename" : "App icon@2x 2.png",
+      "filename" : "launch_center@3x.png",
       "idiom" : "universal",
       "scale" : "3x"
     }
